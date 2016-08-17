@@ -119,7 +119,7 @@ namespace Microsoft.Azure.WebJobs.Host.Executors
             {
                 bindingProvider = DefaultBindingProvider.Create(nameResolver, storageAccountProvider, extensionTypeLocator, messageEnqueuedWatcherAccessor, blobWrittenWatcherAccessor, extensions);
             }
-                        
+
             bool hasFastTableHook = config.GetService<IAsyncCollector<FunctionInstanceLogEntry>>() != null;
             bool noDashboardStorage = config.DashboardConnectionString == null;
             if (hasFastTableHook && noDashboardStorage)
@@ -145,10 +145,10 @@ namespace Microsoft.Azure.WebJobs.Host.Executors
 
                 IStorageAccount dashboardAccount = await storageAccountProvider.GetDashboardAccountAsync(combinedCancellationToken);
 
-                IHostInstanceLogger hostInstanceLogger = await hostInstanceLoggerProvider.GetAsync(combinedCancellationToken);                
-                IFunctionInstanceLogger functionInstanceLogger = await functionInstanceLoggerProvider.GetAsync(combinedCancellationToken);                
+                IHostInstanceLogger hostInstanceLogger = await hostInstanceLoggerProvider.GetAsync(combinedCancellationToken);
+                IFunctionInstanceLogger functionInstanceLogger = await functionInstanceLoggerProvider.GetAsync(combinedCancellationToken);
                 IFunctionOutputLogger functionOutputLogger = await functionOutputLoggerProvider.GetAsync(combinedCancellationToken);
-                
+
                 if (functionExecutor == null)
                 {
                     functionExecutor = new FunctionExecutor(functionInstanceLogger, functionOutputLogger, backgroundExceptionDispatcher, trace, config.FunctionTimeout, fastLogger);
@@ -239,6 +239,8 @@ namespace Microsoft.Azure.WebJobs.Host.Executors
 
                 functionExecutor.HostOutputMessage = hostOutputMessage;
 
+                functionExecutor.FunctionTimeout += (s, e) => host.RaiseFunctionTimeout(e);
+
                 IEnumerable<FunctionDescriptor> descriptors = functions.ReadAllDescriptors();
                 int descriptorsCount = descriptors.Count();
 
@@ -249,14 +251,14 @@ namespace Microsoft.Azure.WebJobs.Host.Executors
 
                 if (descriptorsCount == 0)
                 {
-                    trace.Warning(string.Format("No job functions found. Try making your job classes and methods public. {0}", 
+                    trace.Warning(string.Format("No job functions found. Try making your job classes and methods public. {0}",
                         Constants.ExtensionInitializationMessage), TraceSource.Indexing);
                 }
                 else
                 {
                     StringBuilder functionsTrace = new StringBuilder();
                     functionsTrace.AppendLine("Found the following functions:");
-                    
+
                     foreach (FunctionDescriptor descriptor in descriptors)
                     {
                         functionsTrace.AppendLine(descriptor.FullName);

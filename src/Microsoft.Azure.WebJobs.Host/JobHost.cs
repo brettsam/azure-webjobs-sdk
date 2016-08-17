@@ -40,7 +40,7 @@ namespace Microsoft.Azure.WebJobs
         private JobHostContext _context;
         private IListener _listener;
         private object _contextLock = new object();
-        
+
         private int _state;
         private Task _stopTask;
         private object _stopTaskLock = new object();
@@ -83,7 +83,7 @@ namespace Microsoft.Azure.WebJobs
             {
                 throw new ArgumentNullException("serviceProvider");
             }
-                        
+
             _contextFactory = serviceProvider.GetJobHostContextFactory();
             if (_contextFactory == null)
             {
@@ -94,6 +94,11 @@ namespace Microsoft.Azure.WebJobs
             _shutdownWatcher = WebJobsShutdownWatcher.Create(_shutdownTokenSource);
             _stoppingTokenSource = CancellationTokenSource.CreateLinkedTokenSource(_shutdownTokenSource.Token);
         }
+
+        /// <summary>
+        /// Raised if a function times out.
+        /// </summary>
+        public event EventHandler FunctionTimeout;
 
         // Test hook only.
         internal IListener Listener
@@ -276,6 +281,11 @@ namespace Microsoft.Azure.WebJobs
             {
                 exception.Throw();
             }
+        }
+
+        internal void RaiseFunctionTimeout(EventArgs args)
+        {
+            FunctionTimeout?.Invoke(this, args);
         }
 
         /// <summary>
