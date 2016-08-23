@@ -23,11 +23,6 @@ namespace Microsoft.Azure.WebJobs
     /// </summary>
     public class JobHost : IDisposable
     {
-        private const int StateNotStarted = 0;
-        private const int StateStarting = 1;
-        private const int StateStarted = 2;
-        private const int StateStoppingOrStopped = 3;
-
         private readonly IJobHostContextFactory _contextFactory;
         private readonly CancellationTokenSource _shutdownTokenSource;
         private readonly WebJobsShutdownWatcher _shutdownWatcher;
@@ -40,7 +35,7 @@ namespace Microsoft.Azure.WebJobs
         private JobHostContext _context;
         private IListener _listener;
         private object _contextLock = new object();
-        
+
         private int _state;
         private Task _stopTask;
         private object _stopTaskLock = new object();
@@ -83,7 +78,7 @@ namespace Microsoft.Azure.WebJobs
             {
                 throw new ArgumentNullException("serviceProvider");
             }
-                        
+
             _contextFactory = serviceProvider.GetJobHostContextFactory();
             if (_contextFactory == null)
             {
@@ -93,6 +88,22 @@ namespace Microsoft.Azure.WebJobs
             _shutdownTokenSource = new CancellationTokenSource();
             _shutdownWatcher = WebJobsShutdownWatcher.Create(_shutdownTokenSource);
             _stoppingTokenSource = CancellationTokenSource.CreateLinkedTokenSource(_shutdownTokenSource.Token);
+        }
+
+        /// <summary>
+        /// Raised if a function times out.
+        /// </summary>
+        public event EventHandler FunctionTimeout;
+
+        /// <summary>
+        /// The current JobHostState.
+        /// </summary>
+        public JobHostState State
+        {
+            get
+            {
+                return (JobHostState)_state;
+            }
         }
 
         // Test hook only.
@@ -115,7 +126,7 @@ namespace Microsoft.Azure.WebJobs
         {
             ThrowIfDisposed();
 
-            if (Interlocked.CompareExchange(ref _state, StateStarting, StateNotStarted) != StateNotStarted)
+            if (Interlocked.CompareExchange(ref _state, (int)JobHostState.Starting, (int)JobHostState.Started) != (int)JobHostState.NotStarted)
             {
                 throw new InvalidOperationException("Start has already been called.");
             }
@@ -130,7 +141,7 @@ namespace Microsoft.Azure.WebJobs
             await _listener.StartAsync(cancellationToken);
             _context.Trace.Info("Job host started", Host.TraceSource.Host);
 
-            _state = StateStarted;
+            _state = (int)JobHostState.Started;
         }
 
         /// <summary>Stops the host.</summary>
@@ -145,9 +156,9 @@ namespace Microsoft.Azure.WebJobs
         {
             ThrowIfDisposed();
 
-            Interlocked.CompareExchange(ref _state, StateStoppingOrStopped, StateStarted);
+            Interlocked.CompareExchange(ref _state, (int)JobHostState.StoppingOrStopped, (int)JobHostState.Started);
 
-            if (_state != StateStoppingOrStopped)
+            if (_state != (int)JobHostState.StoppingOrStopped)
             {
                 throw new InvalidOperationException("The host has not yet started.");
             }
@@ -276,6 +287,11 @@ namespace Microsoft.Azure.WebJobs
             {
                 exception.Throw();
             }
+        }
+
+        internal void RaiseFunctionTimeout(EventArgs args)
+        {
+            FunctionTimeout?.Invoke(this, args);
         }
 
         /// <summary>
