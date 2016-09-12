@@ -23,6 +23,7 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
         private readonly IDictionary<IStorageBlobContainer, ContainerScanInfo> _scanInfo;
         private readonly ConcurrentQueue<IStorageBlob> _blobsFoundFromScanOrNotification;
         private readonly CancellationTokenSource _cancellationTokenSource;
+        private IBlobScanInfoManager _blobScanInfoManager;
         // A budget is allocated representing the number of blobs to be listed in a polling 
         // interval, each container will get its share of _scanBlobLimitPerPoll/number of containers.
         // this share will be listed for each container each polling interval
@@ -30,8 +31,9 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
         private PollLogsStrategy _pollLogStrategy;
         private bool _disposed;
 
-        public ScanBlobScanLogHybridPollingStrategy() : base()
+        public ScanBlobScanLogHybridPollingStrategy(IBlobScanInfoManager blobScanInfoManager) : base()
         {
+            _blobScanInfoManager = blobScanInfoManager;
             _scanInfo = new Dictionary<IStorageBlobContainer, ContainerScanInfo>(new StorageBlobContainerComparer());
             _pollLogStrategy = new PollLogsStrategy(performInitialScan: false);
             _cancellationTokenSource = new CancellationTokenSource();
@@ -63,13 +65,18 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
             ContainerScanInfo containerScanInfo;
             if (!_scanInfo.TryGetValue(container, out containerScanInfo))
             {
-                containerScanInfo = new ContainerScanInfo()
+                // First, try to load serialized scanInfo for this container.
+                containerScanInfo = await _blobScanInfoManager.LoadScanInfoAsync(container.Name);
+
+                if (containerScanInfo == null)
                 {
-                    Registrations = new List<ITriggerExecutor<IStorageBlob>>(),
-                    LastSweepCycleLatestModified = DateTime.MinValue,
-                    CurrentSweepCycleLatestModified = DateTime.MinValue,
-                    ContinuationToken = null
-                };
+                    containerScanInfo = new ContainerScanInfo()
+                    {
+                        LastSweepCycleStartTime = DateTime.MinValue,
+                        CurrentSweepCycleStartTime = DateTime.MinValue,
+                        ContinuationToken = null
+                    };
+                }
                 _scanInfo.Add(container, containerScanInfo);
             }
 
@@ -226,7 +233,10 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
             // if ending a cycle then copy currentSweepCycleStartTime to lastSweepCycleStartTime
             if (blobSegment.ContinuationToken == null)
             {
+                containerScanInfo.LastSweepCycleStartTime = containerScanInfo.CurrentSweepCycleStartTime;
                 containerScanInfo.LastSweepCycleLatestModified = containerScanInfo.CurrentSweepCycleLatestModified;
+                containerScanInfo.LastSweepCycleStartTime = containerScanInfo.CurrentSweepCycleStartTime;
+                await _blobScanInfoManager.UpdateScanInfoAsync(container.Name, containerScanInfo);
             }
 
             return newBlobs;

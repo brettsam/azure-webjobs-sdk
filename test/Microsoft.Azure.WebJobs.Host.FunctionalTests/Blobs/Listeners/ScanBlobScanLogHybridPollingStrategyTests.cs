@@ -28,7 +28,7 @@ namespace Microsoft.Azure.WebJobs.Host.FunctionalTests.Blobs.Listeners
             string containerName = Path.GetRandomFileName();
             IStorageAccount account = CreateFakeStorageAccount();
             IStorageBlobContainer container = account.CreateBlobClient().GetContainerReference(containerName);
-            IBlobListenerStrategy product = new ScanBlobScanLogHybridPollingStrategy();
+            IBlobListenerStrategy product = new ScanBlobScanLogHybridPollingStrategy(null);
             LambdaBlobTriggerExecutor executor = new LambdaBlobTriggerExecutor();
             product.Register(container, executor);
             product.Start();
@@ -50,7 +50,7 @@ namespace Microsoft.Azure.WebJobs.Host.FunctionalTests.Blobs.Listeners
             string containerName = Path.GetRandomFileName();
             IStorageAccount account = CreateFakeStorageAccount();
             IStorageBlobContainer container = account.CreateBlobClient().GetContainerReference(containerName);
-            IBlobListenerStrategy product = new ScanBlobScanLogHybridPollingStrategy();
+            IBlobListenerStrategy product = new ScanBlobScanLogHybridPollingStrategy(null);
             LambdaBlobTriggerExecutor executor = new LambdaBlobTriggerExecutor();
             typeof(ScanBlobScanLogHybridPollingStrategy)
                    .GetField("_scanBlobLimitPerPoll", BindingFlags.Instance | BindingFlags.NonPublic)
@@ -81,7 +81,7 @@ namespace Microsoft.Azure.WebJobs.Host.FunctionalTests.Blobs.Listeners
             IStorageAccount account = CreateFakeStorageAccount();
             IStorageBlobContainer firstContainer = account.CreateBlobClient().GetContainerReference(firstContainerName);
             IStorageBlobContainer secondContainer = account.CreateBlobClient().GetContainerReference(secondContainerName);
-            IBlobListenerStrategy product = new ScanBlobScanLogHybridPollingStrategy();
+            IBlobListenerStrategy product = new ScanBlobScanLogHybridPollingStrategy(null);
             LambdaBlobTriggerExecutor executor = new LambdaBlobTriggerExecutor();
             typeof(ScanBlobScanLogHybridPollingStrategy)
                    .GetField("_scanBlobLimitPerPoll", BindingFlags.Instance | BindingFlags.NonPublic)
