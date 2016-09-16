@@ -2,113 +2,95 @@
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
 using System;
-using System.Globalization;
-using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Azure.WebJobs.Host.Storage;
-using Microsoft.Azure.WebJobs.Host.Storage.Blob;
+using Microsoft.Azure.WebJobs.Host.Storage.Table;
 using Microsoft.WindowsAzure.Storage;
-using Newtonsoft.Json;
+using Microsoft.WindowsAzure.Storage.Table;
 
 namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
 {
     internal class StorageBlobScanInfoManager : IBlobScanInfoManager
     {
-        private const string HostContainerName = "azure-webjobs-hosts";
-        private readonly JsonSerializer _serializer;
         private readonly string _hostId;
-        private readonly IStorageAccount _storageAccount;
-        private IStorageBlobDirectory _blobScanInfoDirectory;
+        private readonly IStorageAccount _hostStorageAccount;
+        private IStorageTable _blobScanInfoTable;
 
-        public StorageBlobScanInfoManager(string hostId, IStorageAccount storageAccount)
+        public StorageBlobScanInfoManager(string hostId, IStorageAccount hostStorageAccount)
         {
             if (string.IsNullOrEmpty(hostId))
             {
                 throw new ArgumentNullException("hostId");
             }
-            if (storageAccount == null)
+            if (hostStorageAccount == null)
             {
-                throw new ArgumentNullException("storageAccount");
+                throw new ArgumentNullException("hostStorageAccount");
             }
 
             _hostId = hostId;
-            _storageAccount = storageAccount;
-            JsonSerializerSettings settings = new JsonSerializerSettings
-            {
-                DateFormatHandling = DateFormatHandling.IsoDateFormat
-            };
-            _serializer = JsonSerializer.Create(settings);
+            _hostStorageAccount = hostStorageAccount;
+
+            IStorageTableClient tableClient = _hostStorageAccount.CreateTableClient();
+            _blobScanInfoTable = tableClient.GetTableReference(HostTableNames.Hosts);
         }
 
-        private IStorageBlobDirectory BlobScanInfoDirectory
+        public async Task<DateTime?> LoadLatestScanAsync(string storageAccountName, string containerName)
         {
-            get
-            {
-                // We have to delay create the blob directory since we require the JobHost ID, and that will only
-                // be available AFTER the host as been started
-                if (_blobScanInfoDirectory == null)
-                {
-                    IStorageBlobClient blobClient = _storageAccount.CreateBlobClient();
-                    string timerStatusDirectoryPath = string.Format(CultureInfo.InvariantCulture, "blobScanInfo/{0}", _hostId);
-                    _blobScanInfoDirectory = blobClient.GetContainerReference(HostContainerName).GetDirectoryReference(timerStatusDirectoryPath);
-                }
-                return _blobScanInfoDirectory;
-            }
-        }
-
-        public async Task<ContainerScanInfo> LoadScanInfoAsync(string containerName)
-        {
-            IStorageBlockBlob scanInfoBlob = GetScanInfoBlobReference(containerName);
-
+            DateTime? value = null;
+            string partitionKey = BlobScanInfoEntity.GetPartitionKey(_hostId);
+            string rowKey = BlobScanInfoEntity.GetRowKey(storageAccountName, containerName);
+            IStorageTableOperation retrieveOperation = _blobScanInfoTable.CreateRetrieveOperation<BlobScanInfoEntity>(partitionKey, rowKey);
             try
             {
-                string scanInfoLine = await scanInfoBlob.DownloadTextAsync(CancellationToken.None);
-                ContainerScanInfo scanInfo;
-                using (StringReader stringReader = new StringReader(scanInfoLine))
+                TableResult result = await _blobScanInfoTable.ExecuteAsync(retrieveOperation, CancellationToken.None);
+                BlobScanInfoEntity blobScanInfo = (BlobScanInfoEntity)result.Result;
+                if (blobScanInfo != null)
                 {
-                    scanInfo = (ContainerScanInfo)_serializer.Deserialize(stringReader, typeof(ContainerScanInfo));
+                    value = blobScanInfo.LatestScanTimestamp.DateTime;
                 }
-                return scanInfo;
-            }
-            catch (StorageException exception)
-            {
-                if (exception.RequestInformation != null &&
-                    exception.RequestInformation.HttpStatusCode == 404)
-                {
-                    // we haven't saved any scanInfo yet
-                    return null;
-                }
-                throw;
-            }
-        }
-
-        public async Task UpdateScanInfoAsync(string containerName, ContainerScanInfo scanInfo)
-        {
-            string scanInfoLine;
-            using (StringWriter stringWriter = new StringWriter())
-            {
-                _serializer.Serialize(stringWriter, scanInfo);
-                scanInfoLine = stringWriter.ToString();
-            }
-
-            try
-            {
-                IStorageBlockBlob scanInfoBlob = GetScanInfoBlobReference(containerName);
-                await scanInfoBlob.UploadTextAsync(scanInfoLine);
             }
             catch
             {
-                // best effort               
+                // best effort
             }
+
+            return value;
         }
 
-        private IStorageBlockBlob GetScanInfoBlobReference(string containerName)
+        public async Task UpdateLatestScanAsync(string storageAccountName, string containerName, DateTime latestScan)
         {
-            // Path to the status blob is:
-            // blobScanInfo/{hostId}/{containerName}/scanInfo
-            string blobName = string.Format(CultureInfo.InvariantCulture, "{0}/scanInfo", containerName);
-            return BlobScanInfoDirectory.GetBlockBlobReference(blobName);
+            BlobScanInfoEntity entity = new BlobScanInfoEntity(_hostId, storageAccountName, containerName);
+            entity.LatestScanTimestamp = latestScan;
+
+            IStorageTableOperation insertOrReplaceOperation = _blobScanInfoTable.CreateInsertOrReplaceOperation(entity);
+
+            try
+            {
+                await _blobScanInfoTable.ExecuteAsync(insertOrReplaceOperation, CancellationToken.None);
+                return;
+            }
+            catch (Exception ex)
+            {
+                StorageException storageEx = ex as StorageException;
+                if (storageEx == null || !storageEx.IsNotFoundTableNotFound())
+                {
+                    // best effort
+                    return;
+                }
+            }
+
+            // we can only get here if Table was not found.
+            await _blobScanInfoTable.CreateIfNotExistsAsync(CancellationToken.None);
+
+            try
+            {
+                await _blobScanInfoTable.ExecuteAsync(insertOrReplaceOperation, CancellationToken.None);
+            }
+            catch
+            {
+                // best effort
+            }
         }
     }
 }

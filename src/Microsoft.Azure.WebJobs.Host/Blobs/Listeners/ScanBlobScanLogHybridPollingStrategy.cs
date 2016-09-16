@@ -19,7 +19,7 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
 {
     internal sealed class ScanBlobScanLogHybridPollingStrategy : IBlobListenerStrategy
     {
-        private static readonly TimeSpan PollingtInterval = TimeSpan.FromSeconds(10);
+        private static readonly TimeSpan PollingInterval = TimeSpan.FromSeconds(10);
         private readonly IDictionary<IStorageBlobContainer, ContainerScanInfo> _scanInfo;
         private readonly ConcurrentQueue<IStorageBlob> _blobsFoundFromScanOrNotification;
         private readonly CancellationTokenSource _cancellationTokenSource;
@@ -66,17 +66,15 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
             if (!_scanInfo.TryGetValue(container, out containerScanInfo))
             {
                 // First, try to load serialized scanInfo for this container.
-                containerScanInfo = await _blobScanInfoManager.LoadScanInfoAsync(container.Name);
+                DateTime? latestStoredScan = await _blobScanInfoManager.LoadLatestScanAsync(container.ServiceClient.Credentials.AccountName, container.Name);
 
-                if (containerScanInfo == null)
+                containerScanInfo = new ContainerScanInfo()
                 {
-                    containerScanInfo = new ContainerScanInfo()
-                    {
-                        LastSweepCycleStartTime = DateTime.MinValue,
-                        CurrentSweepCycleStartTime = DateTime.MinValue,
-                        ContinuationToken = null
-                    };
-                }
+                    LastSweepCycleLatestModified = latestStoredScan ?? DateTime.MinValue,
+                    CurrentSweepCycleLatestModified = DateTime.MinValue,
+                    ContinuationToken = null
+                };
+
                 _scanInfo.Add(container, containerScanInfo);
             }
 
@@ -123,7 +121,7 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
             await Task.WhenAll(pollingTasks);
 
             // Run subsequent iterations at "_pollingInterval" second intervals.
-            return new TaskSeriesCommandResult(wait: Task.Delay(PollingtInterval));
+            return new TaskSeriesCommandResult(wait: Task.Delay(PollingInterval));
         }
 
         private async Task PollAndNotify(IStorageBlobContainer container, ContainerScanInfo containerInfo, CancellationToken cancellationToken, List<IStorageBlob> failedNotifications)
@@ -230,13 +228,13 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
             // record continuation token for next chunk retrieval
             containerScanInfo.ContinuationToken = blobSegment.ContinuationToken;
 
-            // if ending a cycle then copy currentSweepCycleStartTime to lastSweepCycleStartTime
-            if (blobSegment.ContinuationToken == null)
+            // if ending a cycle then copy currentSweepCycleStartTime to lastSweepCycleStartTime, if changed
+            if (blobSegment.ContinuationToken == null &&
+                containerScanInfo.CurrentSweepCycleLatestModified > containerScanInfo.LastSweepCycleLatestModified)
             {
-                containerScanInfo.LastSweepCycleStartTime = containerScanInfo.CurrentSweepCycleStartTime;
                 containerScanInfo.LastSweepCycleLatestModified = containerScanInfo.CurrentSweepCycleLatestModified;
-                containerScanInfo.LastSweepCycleStartTime = containerScanInfo.CurrentSweepCycleStartTime;
-                await _blobScanInfoManager.UpdateScanInfoAsync(container.Name, containerScanInfo);
+                await _blobScanInfoManager.UpdateLatestScanAsync(container.ServiceClient.Credentials.AccountName,
+                    container.Name, containerScanInfo.LastSweepCycleLatestModified);
             }
 
             return newBlobs;

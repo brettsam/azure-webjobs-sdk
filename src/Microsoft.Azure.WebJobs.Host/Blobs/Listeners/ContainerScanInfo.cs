@@ -6,7 +6,6 @@ using System.Collections.Generic;
 using Microsoft.Azure.WebJobs.Host.Listeners;
 using Microsoft.Azure.WebJobs.Host.Storage.Blob;
 using Microsoft.WindowsAzure.Storage.Blob;
-using Newtonsoft.Json;
 
 namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
 {
@@ -17,14 +16,12 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
             Registrations = new List<ITriggerExecutor<IStorageBlob>>();
         }
 
-        [JsonIgnore]
         public ICollection<ITriggerExecutor<IStorageBlob>> Registrations { get; set; }
 
         public DateTime LastSweepCycleLatestModified { get; set; }
 
         public DateTime CurrentSweepCycleLatestModified { get; set; }
 
-        [JsonIgnore]
         public BlobContinuationToken ContinuationToken { get; set; }
     }
 }

@@ -28,7 +28,7 @@ namespace Microsoft.Azure.WebJobs.Host.FunctionalTests.Blobs.Listeners
             string containerName = Path.GetRandomFileName();
             IStorageAccount account = CreateFakeStorageAccount();
             IStorageBlobContainer container = account.CreateBlobClient().GetContainerReference(containerName);
-            IBlobListenerStrategy product = new ScanBlobScanLogHybridPollingStrategy(null);
+            IBlobListenerStrategy product = new ScanBlobScanLogHybridPollingStrategy(new TestBlobScanInfoManager());
             LambdaBlobTriggerExecutor executor = new LambdaBlobTriggerExecutor();
             product.Register(container, executor);
             product.Start();
@@ -50,7 +50,7 @@ namespace Microsoft.Azure.WebJobs.Host.FunctionalTests.Blobs.Listeners
             string containerName = Path.GetRandomFileName();
             IStorageAccount account = CreateFakeStorageAccount();
             IStorageBlobContainer container = account.CreateBlobClient().GetContainerReference(containerName);
-            IBlobListenerStrategy product = new ScanBlobScanLogHybridPollingStrategy(null);
+            IBlobListenerStrategy product = new ScanBlobScanLogHybridPollingStrategy(new TestBlobScanInfoManager());
             LambdaBlobTriggerExecutor executor = new LambdaBlobTriggerExecutor();
             typeof(ScanBlobScanLogHybridPollingStrategy)
                    .GetField("_scanBlobLimitPerPoll", BindingFlags.Instance | BindingFlags.NonPublic)
@@ -81,7 +81,7 @@ namespace Microsoft.Azure.WebJobs.Host.FunctionalTests.Blobs.Listeners
             IStorageAccount account = CreateFakeStorageAccount();
             IStorageBlobContainer firstContainer = account.CreateBlobClient().GetContainerReference(firstContainerName);
             IStorageBlobContainer secondContainer = account.CreateBlobClient().GetContainerReference(secondContainerName);
-            IBlobListenerStrategy product = new ScanBlobScanLogHybridPollingStrategy(null);
+            IBlobListenerStrategy product = new ScanBlobScanLogHybridPollingStrategy(new TestBlobScanInfoManager());
             LambdaBlobTriggerExecutor executor = new LambdaBlobTriggerExecutor();
             typeof(ScanBlobScanLogHybridPollingStrategy)
                    .GetField("_scanBlobLimitPerPoll", BindingFlags.Instance | BindingFlags.NonPublic)
@@ -134,7 +134,7 @@ namespace Microsoft.Azure.WebJobs.Host.FunctionalTests.Blobs.Listeners
                         ((FakeStorageBlobProperties)blob.Properties).LastModified = timeMap[blob.Name];
                     }
                 });
-            IBlobListenerStrategy product = new ScanBlobScanLogHybridPollingStrategy();
+            IBlobListenerStrategy product = new ScanBlobScanLogHybridPollingStrategy(new TestBlobScanInfoManager());
             LambdaBlobTriggerExecutor executor = new LambdaBlobTriggerExecutor();
             typeof(ScanBlobScanLogHybridPollingStrategy)
                    .GetField("_scanBlobLimitPerPoll", BindingFlags.Instance | BindingFlags.NonPublic)
@@ -155,6 +155,82 @@ namespace Microsoft.Azure.WebJobs.Host.FunctionalTests.Blobs.Listeners
 
             // We should see the new item.
             RunExecuterWithExpectedBlobs(expectedNames, product, executor);
+        }
+
+        [Fact]
+        public async Task RegisterAsync_InitializesWithScanInfoManager()
+        {
+            string firstContainerName = Guid.NewGuid().ToString();
+            IStorageAccount account = CreateFakeStorageAccount();
+            IStorageBlobContainer container = account.CreateBlobClient().GetContainerReference(firstContainerName);
+            TestBlobScanInfoManager scanInfoManager = new TestBlobScanInfoManager();            
+            IBlobListenerStrategy product = new ScanBlobScanLogHybridPollingStrategy(scanInfoManager);
+            LambdaBlobTriggerExecutor executor = new LambdaBlobTriggerExecutor();
+
+            // Create a few blobs.
+            for (int i = 0; i < 5; i++)
+            {
+                CreateAblobAndUploadToContainer(container);
+            }
+
+            scanInfoManager.LatestScans[firstContainerName] = DateTime.UtcNow;
+            await product.RegisterAsync(container, executor, CancellationToken.None);
+
+            // delay slightly so we guarantee a later timestamp
+            await Task.Delay(10);
+
+            var expectedNames = new List<string>();
+            expectedNames.Add(CreateAblobAndUploadToContainer(container));
+
+            RunExecuterWithExpectedBlobs(expectedNames, product, executor);
+        }
+
+        [Fact]
+        public async Task ExecuteAsync_UpdatesScanInfoManager()
+        {
+            int testScanBlobLimitPerPoll = 6;
+            string firstContainerName = Guid.NewGuid().ToString();
+            string secondContainerName = Guid.NewGuid().ToString();
+            IStorageAccount account = CreateFakeStorageAccount();
+            IStorageBlobContainer firstContainer = account.CreateBlobClient().GetContainerReference(firstContainerName);
+            IStorageBlobContainer secondContainer = account.CreateBlobClient().GetContainerReference(secondContainerName);
+            TestBlobScanInfoManager testScanInfoManager = new TestBlobScanInfoManager();
+            testScanInfoManager.LatestScans[firstContainerName] = DateTime.MinValue;
+            testScanInfoManager.LatestScans[secondContainerName] = DateTime.MinValue;
+            IBlobListenerStrategy product = new ScanBlobScanLogHybridPollingStrategy(testScanInfoManager);
+            LambdaBlobTriggerExecutor executor = new LambdaBlobTriggerExecutor();
+            typeof(ScanBlobScanLogHybridPollingStrategy)
+                  .GetField("_scanBlobLimitPerPoll", BindingFlags.Instance | BindingFlags.NonPublic)
+                  .SetValue(product, testScanBlobLimitPerPoll);
+
+            await product.RegisterAsync(firstContainer, executor, CancellationToken.None);
+            await product.RegisterAsync(secondContainer, executor, CancellationToken.None);
+
+            var firstExpectedNames = new List<string>();
+            for (int i = 0; i < 3; i++)
+            {
+                firstExpectedNames.Add(CreateAblobAndUploadToContainer(firstContainer));
+            }
+            RunExecuteWithMultiPollingInterval(firstExpectedNames, product, executor, testScanBlobLimitPerPoll / 2);
+
+            // only expect the first container to have updated its scanInfo
+            Assert.Equal(1, testScanInfoManager.UpdateCounts[firstContainerName]);
+            int count;
+            testScanInfoManager.UpdateCounts.TryGetValue(secondContainerName, out count);
+            Assert.Equal(0, count);
+
+            await Task.Delay(10);
+
+            var secondExpectedNames = new List<string>();
+            for (int i = 0; i < 7; i++)
+            {
+                secondExpectedNames.Add(CreateAblobAndUploadToContainer(secondContainer));
+            }
+            RunExecuteWithMultiPollingInterval(secondExpectedNames, product, executor, testScanBlobLimitPerPoll / 2);
+
+            // this time, only expect the second container to have updated its scanInfo
+            Assert.Equal(1, testScanInfoManager.UpdateCounts[firstContainerName]);
+            Assert.Equal(1, testScanInfoManager.UpdateCounts[secondContainerName]);
         }
 
         private static IStorageAccount CreateFakeStorageAccount()
@@ -251,6 +327,47 @@ namespace Microsoft.Azure.WebJobs.Host.FunctionalTests.Blobs.Listeners
                 var results = await base.ListBlobsSegmentedAsync(prefix, useFlatBlobListing, blobListingDetails, maxResults, currentToken, options, operationContext, cancellationToken);
                 _onListBlobsSegmented(results);
                 return results;
+            }
+        }
+
+        private class TestBlobScanInfoManager : IBlobScanInfoManager
+        {
+            public TestBlobScanInfoManager()
+            {
+                LatestScans = new Dictionary<string, DateTime>();
+                UpdateCounts = new Dictionary<string, int>();
+            }
+
+            public IDictionary<string, int> UpdateCounts { get; private set; }
+
+            public IDictionary<string, DateTime> LatestScans { get; private set; }
+
+            public Task<DateTime?> LoadLatestScanAsync(string storageAccountName, string containerName)
+            {
+                DateTime? value = null;
+                DateTime latestScan;
+                if (LatestScans.TryGetValue(containerName, out latestScan))
+                {
+                    value = latestScan;
+                }
+
+                return Task.FromResult(value);
+            }
+
+            public Task UpdateLatestScanAsync(string storageAccountName, string containerName, DateTime latestScan)
+            {
+                LatestScans[containerName] = latestScan;
+
+                if (UpdateCounts.ContainsKey(containerName))
+                {
+                    UpdateCounts[containerName]++;
+                }
+                else
+                {
+                    UpdateCounts[containerName] = 1;
+                }
+
+                return Task.FromResult(0);
             }
         }
     }
