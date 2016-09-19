@@ -28,9 +28,18 @@ namespace Microsoft.Azure.WebJobs.Host.FunctionalTests.TestDoubles
 
         public TableResult Execute(string tableName, IStorageTableOperation operation)
         {
-            if (!_items.ContainsKey(tableName))
+            // Retrieve operations return a TableResult; others throw
+            bool exists = _items.ContainsKey(tableName);
+            if (!exists)
             {
-                return new TableResult { HttpStatusCode = 404 };
+                if (operation.OperationType == TableOperationType.Retrieve)
+                {
+                    return new TableResult { HttpStatusCode = 404 };
+                }
+                else
+                {
+                    throw StorageExceptionFactory.Create(404, "TableNotFound");
+                }
             }
 
             return _items[tableName].Execute(operation);
@@ -104,38 +113,59 @@ namespace Microsoft.Azure.WebJobs.Host.FunctionalTests.TestDoubles
                         };
 
                     case TableOperationType.Insert:
-                        if (!_entities.TryAdd(key, new TableItem(writeProperties)))
-                        {
-                            throw new InvalidOperationException(String.Format(CultureInfo.CurrentCulture,
-                                "Entity PK='{0}',RK='{1}' already exists.", entity.PartitionKey, entity.RowKey));
-                        }
-                        return new TableResult();
+                        return InsertEntity(entity, writeProperties);
 
                     case TableOperationType.Replace:
-                        if (entity.ETag == null)
-                        {
-                            throw new InvalidOperationException("Replace requires an ETag.");
-                        }
-                        else if (!_entities.TryUpdate(key, new TableItem(writeProperties), new TableItem(entity.ETag)))
-                        {
-                            if (entity.ETag == "*")
-                            {
-                                throw new InvalidOperationException(String.Format(CultureInfo.CurrentCulture,
-                                    "Entity PK='{0}',RK='{1}' does not exist.", entity.PartitionKey, entity.RowKey));
-                            }
-                            else
-                            {
-                                throw new InvalidOperationException(String.Format(CultureInfo.CurrentCulture,
-                                    "Entity PK='{0}',RK='{1}' does not match eTag '{2}'.", entity.PartitionKey,
-                                    entity.RowKey, entity.ETag));
-                            }
-                        }
-                        return new TableResult();
+                        return ReplaceEntity(entity, writeProperties);
 
+                    case TableOperationType.InsertOrReplace:
+                        if (_entities.ContainsKey(key))
+                        {
+                            return ReplaceEntity(entity, writeProperties);
+                        }
+                        else
+                        {
+                            return InsertEntity(entity, writeProperties);
+                        }
                     default:
                         throw new InvalidOperationException(
                             "Unsupported operation type " + operationType.ToString());
                 }
+            }
+
+            private TableResult InsertEntity(ITableEntity entity, IDictionary<string, EntityProperty> writeProperties)
+            {
+                Tuple<string, string> key = new Tuple<string, string>(entity.PartitionKey, entity.RowKey);
+                if (!_entities.TryAdd(key, new TableItem(writeProperties)))
+                {
+                    throw new InvalidOperationException(String.Format(CultureInfo.CurrentCulture,
+                        "Entity PK='{0}',RK='{1}' already exists.", entity.PartitionKey, entity.RowKey));
+                }
+                return new TableResult();
+            }
+
+            private TableResult ReplaceEntity(ITableEntity entity, IDictionary<string, EntityProperty> writeProperties)
+            {
+                Tuple<string, string> key = new Tuple<string, string>(entity.PartitionKey, entity.RowKey);
+                if (entity.ETag == null)
+                {
+                    throw new InvalidOperationException("Replace requires an ETag.");
+                }
+                else if (!_entities.TryUpdate(key, new TableItem(writeProperties), new TableItem(entity.ETag)))
+                {
+                    if (entity.ETag == "*")
+                    {
+                        throw new InvalidOperationException(String.Format(CultureInfo.CurrentCulture,
+                            "Entity PK='{0}',RK='{1}' does not exist.", entity.PartitionKey, entity.RowKey));
+                    }
+                    else
+                    {
+                        throw new InvalidOperationException(String.Format(CultureInfo.CurrentCulture,
+                            "Entity PK='{0}',RK='{1}' does not match eTag '{2}'.", entity.PartitionKey,
+                            entity.RowKey, entity.ETag));
+                    }
+                }
+                return new TableResult();
             }
 
             public IList<TableResult> ExecuteBatch(IStorageTableBatchOperation batch)

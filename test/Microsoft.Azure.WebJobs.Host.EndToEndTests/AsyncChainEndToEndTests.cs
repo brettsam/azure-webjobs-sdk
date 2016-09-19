@@ -152,7 +152,7 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
 
                 Assert.Equal(16, storageClientFactory.TotalBlobClientCount);
                 Assert.Equal(9, storageClientFactory.TotalQueueClientCount);
-                Assert.Equal(0, storageClientFactory.TotalTableClientCount);
+                Assert.Equal(1, storageClientFactory.TotalTableClientCount);
 
                 Assert.Equal(6, storageClientFactory.ParameterBlobClientCount);
                 Assert.Equal(7, storageClientFactory.ParameterQueueClientCount);

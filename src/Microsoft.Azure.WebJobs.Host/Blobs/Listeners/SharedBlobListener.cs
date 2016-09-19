@@ -91,7 +91,7 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
         {
             if (!StorageClient.IsDevelopmentStorageAccount(account))
             {
-                IBlobScanInfoManager scanInfoManager = new StorageBlobScanInfoManager(hostId, account);
+                IBlobScanInfoManager scanInfoManager = new StorageBlobScanInfoManager(hostId, account.CreateTableClient());
                 return new ScanBlobScanLogHybridPollingStrategy(scanInfoManager);
             }
             else

@@ -52,7 +52,7 @@ namespace Microsoft.Azure.WebJobs.Host.FunctionalTests.TestDoubles
 
         public IStorageTableOperation CreateInsertOrReplaceOperation(ITableEntity entity)
         {
-            throw new NotImplementedException();
+            return FakeStorageTableOperation.InsertOrReplace(entity);
         }
 
         public IQueryable<TElement> CreateQuery<TElement>() where TElement : ITableEntity, new()

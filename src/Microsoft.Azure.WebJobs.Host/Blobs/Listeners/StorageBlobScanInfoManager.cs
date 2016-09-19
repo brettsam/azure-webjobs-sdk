@@ -14,25 +14,21 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
     internal class StorageBlobScanInfoManager : IBlobScanInfoManager
     {
         private readonly string _hostId;
-        private readonly IStorageAccount _hostStorageAccount;
         private IStorageTable _blobScanInfoTable;
 
-        public StorageBlobScanInfoManager(string hostId, IStorageAccount hostStorageAccount)
+        public StorageBlobScanInfoManager(string hostId, IStorageTableClient hostTableClient)
         {
             if (string.IsNullOrEmpty(hostId))
             {
                 throw new ArgumentNullException("hostId");
             }
-            if (hostStorageAccount == null)
+            if (hostTableClient == null)
             {
-                throw new ArgumentNullException("hostStorageAccount");
+                throw new ArgumentNullException("hostTableClient");
             }
 
             _hostId = hostId;
-            _hostStorageAccount = hostStorageAccount;
-
-            IStorageTableClient tableClient = _hostStorageAccount.CreateTableClient();
-            _blobScanInfoTable = tableClient.GetTableReference(HostTableNames.Hosts);
+            _blobScanInfoTable = hostTableClient.GetTableReference(HostTableNames.Hosts);
         }
 
         public async Task<DateTime?> LoadLatestScanAsync(string storageAccountName, string containerName)

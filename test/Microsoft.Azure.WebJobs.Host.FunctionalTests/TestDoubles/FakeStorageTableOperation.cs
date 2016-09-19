@@ -70,5 +70,10 @@ namespace Microsoft.Azure.WebJobs.Host.FunctionalTests.TestDoubles
         {
             return new FakeStorageTableOperation(TableOperationType.Replace, entity);
         }
+
+        public static FakeStorageTableOperation InsertOrReplace(ITableEntity entity)
+        {
+            return new FakeStorageTableOperation(TableOperationType.InsertOrReplace, entity);
+        }
     }
 }
