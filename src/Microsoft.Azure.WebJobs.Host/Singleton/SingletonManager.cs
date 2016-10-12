@@ -4,6 +4,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
@@ -29,6 +30,7 @@ namespace Microsoft.Azure.WebJobs.Host
     {
         internal const string FunctionInstanceMetadataKey = "FunctionInstance";
         private readonly INameResolver _nameResolver;
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Performance", "CA1823:AvoidUnusedPrivateFields")]
         private readonly IWebJobsExceptionHandler _exceptionHandler;
         private readonly SingletonConfiguration _config;
         private readonly IStorageAccountProvider _accountProvider;
@@ -74,8 +76,8 @@ namespace Microsoft.Azure.WebJobs.Host
         }
 
         // for testing
-        internal TimeSpan MinimumLeaseRenewalInterval 
-        { 
+        internal TimeSpan MinimumLeaseRenewalInterval
+        {
             get
             {
                 return _minimumLeaseRenewalInterval;
@@ -92,8 +94,8 @@ namespace Microsoft.Azure.WebJobs.Host
 
             if (lockHandle == null)
             {
-                TimeSpan acquisitionTimeout = attribute.LockAcquisitionTimeout != null 
-                    ? TimeSpan.FromSeconds(attribute.LockAcquisitionTimeout.Value) : 
+                TimeSpan acquisitionTimeout = attribute.LockAcquisitionTimeout != null
+                    ? TimeSpan.FromSeconds(attribute.LockAcquisitionTimeout.Value) :
                     _config.LockAcquisitionTimeout;
                 throw new TimeoutException(string.Format("Unable to acquire singleton lock blob lease for blob '{0}' (timeout of {1} exceeded).", lockId, acquisitionTimeout.ToString("g")));
             }
@@ -143,15 +145,76 @@ namespace Microsoft.Azure.WebJobs.Host
             {
                 LeaseId = leaseId,
                 LockId = lockId,
-                Blob = lockBlob,
-                LeaseRenewalTimer = CreateLeaseRenewalTimer(lockBlob, leaseId, lockId, lockPeriod, _exceptionHandler)
+                Blob = lockBlob
             };
 
-            // start the renewal timer, which ensures that we maintain our lease until
-            // the lock is released
-            lockHandle.LeaseRenewalTimer.Start();
+            TimeSpan normalUpdateInterval = new TimeSpan(lockPeriod.Ticks / 2);
+            IDelayStrategy speedupStrategy = new LinearSpeedupStrategy(normalUpdateInterval, MinimumLeaseRenewalInterval);
+            new Thread(() =>
+            {
+                System.Timers.Timer timer = new System.Timers.Timer();
+                timer.Interval = normalUpdateInterval.TotalMilliseconds;
+                timer.AutoReset = false;
+                timer.Elapsed += (sender, e) =>
+                {
+                    int a, b;
+                    ThreadPool.GetAvailableThreads(out a, out b);
+                    _trace.Verbose("----------");
+                    _trace.Verbose(string.Format("Id: {0} ThreadPool: {1} {2} {3}", Thread.CurrentThread.ManagedThreadId, Thread.CurrentThread.IsThreadPoolThread, a, b));
+                    _trace.Verbose("Timer    " + DateTime.Now.ToString("HH:mm:ss.ffff"));
+                    Timer_Elapsed(sender, lockBlob, leaseId, lockId, speedupStrategy);
+                    _trace.Verbose("----------");
+                };
+
+                _trace.Verbose(string.Format("Id: {0} ThreadPool: {1}", Thread.CurrentThread.ManagedThreadId, Thread.CurrentThread.IsThreadPoolThread));
+                //Synchronized sync = new Synchronized();
+                //timer.SynchronizingObject = sync;
+                timer.Start();
+            }).Start();
 
             return lockHandle;
+        }
+
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Naming", "CA2204:Literals should be spelled correctly", MessageId = "ThreadPool")]
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Globalization", "CA1305:SpecifyIFormatProvider", MessageId = "System.DateTime.ToString(System.String)")]
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Globalization", "CA1305:SpecifyIFormatProvider", MessageId = "System.String.Format(System.String,System.Object,System.Object)")]
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Usage", "CA1801:ReviewUnusedParameters", MessageId = "lockId")]
+        private void Timer_Elapsed(object sender, IStorageBlockBlob leaseBlob, string leaseId, string lockId, IDelayStrategy speedupStrategy)
+        {
+            TimeSpan delay = TimeSpan.MinValue;
+            try
+            {
+                AccessCondition condition = new AccessCondition
+                {
+                    LeaseId = leaseId
+                };
+                _trace.Verbose(string.Format("Id: {0} ThreadPool: {1}", Thread.CurrentThread.ManagedThreadId, Thread.CurrentThread.IsThreadPoolThread));
+                _trace.Verbose(string.Format(CultureInfo.InvariantCulture, "Renewing {0}", DateTime.Now.ToString("HH:mm:ss.ffff")));
+                leaseBlob.RenewLeaseAsync(condition, null, null, CancellationToken.None).GetAwaiter().GetResult();
+                _trace.Verbose(string.Format("Id: {0} ThreadPool: {1}", Thread.CurrentThread.ManagedThreadId, Thread.CurrentThread.IsThreadPoolThread));
+                _trace.Verbose(string.Format(CultureInfo.InvariantCulture, "Renewed  {0}", DateTime.Now.ToString("HH:mm:ss.ffff")));
+
+                // The next execution should occur after a normal delay.
+                delay = speedupStrategy.GetNextDelay(executionSucceeded: true);
+            }
+            catch (StorageException exception)
+            {
+                if (exception.IsServerSideError())
+                {
+                    // The next execution should occur more quickly (try to renew the lease before it expires).
+                    delay = speedupStrategy.GetNextDelay(executionSucceeded: false);
+                }
+                else
+                {
+                    // If we've lost the lease or cannot restablish it, we want to fail any
+                    // in progress function execution
+                    throw;
+                }
+            }
+
+            var timer = (System.Timers.Timer)sender;
+            timer.Interval = delay.TotalMilliseconds;
+            timer.Start();
         }
 
         public async virtual Task ReleaseLockAsync(object lockHandle, CancellationToken cancellationToken)
@@ -345,7 +408,9 @@ namespace Microsoft.Azure.WebJobs.Host
                     config.ListenerLockPeriod : config.LockPeriod;
         }
 
-        private ITaskSeriesTimer CreateLeaseRenewalTimer(IStorageBlockBlob leaseBlob, string leaseId, string lockId, TimeSpan leasePeriod, 
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Performance", "CA1811:AvoidUncalledPrivateCode")]
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Reliability", "CA2000:Dispose objects before losing scope")]
+        private ITaskSeriesTimer CreateLeaseRenewalTimer(IStorageBlockBlob leaseBlob, string leaseId, string lockId, TimeSpan leasePeriod,
             IWebJobsExceptionHandler exceptionHandler)
         {
             // renew the lease when it is halfway to expiring   
@@ -353,7 +418,7 @@ namespace Microsoft.Azure.WebJobs.Host
 
             IDelayStrategy speedupStrategy = new LinearSpeedupStrategy(normalUpdateInterval, MinimumLeaseRenewalInterval);
             ITaskSeriesCommand command = new RenewLeaseCommand(leaseBlob, leaseId, lockId, speedupStrategy, _trace);
-            return new TaskSeriesTimer(command, exceptionHandler, Task.Delay(normalUpdateInterval));
+            return new TaskSeriesTimer(command, exceptionHandler, Task.Delay(normalUpdateInterval), new TaskFactory(new SingleThreadTaskScheduler()));
         }
 
         private async Task<string> TryAcquireLeaseAsync(IStorageBlockBlob blob, TimeSpan leasePeriod, CancellationToken cancellationToken)
@@ -465,7 +530,7 @@ namespace Microsoft.Azure.WebJobs.Host
                     {
                         isContainerNotFoundException = true;
                     }
-                    else if (exception.RequestInformation.HttpStatusCode == 409 || 
+                    else if (exception.RequestInformation.HttpStatusCode == 409 ||
                              exception.RequestInformation.HttpStatusCode == 412)
                     {
                         // The blob already exists, or is leased by someone else
@@ -563,17 +628,16 @@ namespace Microsoft.Azure.WebJobs.Host
 
             public async Task<TaskSeriesCommandResult> ExecuteAsync(CancellationToken cancellationToken)
             {
-                TimeSpan delay;
+                TimeSpan delay = TimeSpan.MinValue;
 
                 try
                 {
-                    _trace.Verbose(string.Format(CultureInfo.InvariantCulture, "Renewing Singleton lock ({0})", _lockId), source: TraceSource.Execution);
-
                     AccessCondition condition = new AccessCondition
                     {
                         LeaseId = _leaseId
                     };
                     await _leaseBlob.RenewLeaseAsync(condition, null, null, cancellationToken);
+                    _trace.Verbose(string.Format(CultureInfo.InvariantCulture, "Renewed Singleton lock ({0}) -- {1} -- {2}", _lockId, DateTime.Now.ToLongTimeString(), Thread.CurrentThread.ManagedThreadId), source: TraceSource.Execution);
 
                     // The next execution should occur after a normal delay.
                     delay = _speedupStrategy.GetNextDelay(executionSucceeded: true);
@@ -594,6 +658,108 @@ namespace Microsoft.Azure.WebJobs.Host
                 }
 
                 return new TaskSeriesCommandResult(wait: Task.Delay(delay));
+            }
+        }
+
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Design", "CA1001:TypesThatOwnDisposableFieldsShouldBeDisposable")]
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Performance", "CA1812:AvoidUninstantiatedInternalClasses")]
+        private class Synchronized : ISynchronizeInvoke
+        {
+            private Thread _thread;
+            private BlockingCollection<Tuple<Delegate, object[]>> _delegates = new BlockingCollection<Tuple<Delegate, object[]>>();
+
+            public Synchronized()
+            {
+                _thread = new Thread(() =>
+                {
+                    foreach (Tuple<Delegate, object[]> t in _delegates.GetConsumingEnumerable())
+                    {
+                        t.Item1.DynamicInvoke(t.Item2);
+                    }
+                });
+
+                _thread.Start();
+            }
+
+            public bool InvokeRequired
+            {
+                get
+                {
+                    return Thread.CurrentThread.ManagedThreadId != _thread.ManagedThreadId;
+                }
+            }
+
+            public IAsyncResult BeginInvoke(Delegate method, object[] args)
+            {
+                Invoke(method, args);
+                return null;
+            }
+
+            public object EndInvoke(IAsyncResult result)
+            {
+                throw new NotImplementedException();
+            }
+
+            [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Design", "CA1062:Validate arguments of public methods", MessageId = "0")]
+            public object Invoke(Delegate method, object[] args)
+            {
+                _delegates.Add(new Tuple<Delegate, object[]>(method, args));
+                return null;
+            }
+        }
+
+        private class SingleThreadTaskScheduler : TaskScheduler, IDisposable
+        {
+            private BlockingCollection<Task> _tasks = new BlockingCollection<Task>();
+            private List<Thread> _threads;
+
+            public SingleThreadTaskScheduler()
+            {
+                _threads = Enumerable.Range(0, 10).Select(i =>
+                {
+                    var thread = new Thread(() =>
+                    {
+                        foreach (var t in _tasks.GetConsumingEnumerable())
+                        {
+                            TryExecuteTask(t);
+                        }
+                    });
+                    thread.IsBackground = true;
+                    thread.SetApartmentState(ApartmentState.STA);
+                    return thread;
+                }).ToList();
+
+                _threads.ForEach(t => t.Start());
+            }
+
+            public void Dispose()
+            {
+                if (_tasks != null)
+                {
+                    _tasks.CompleteAdding();
+                    _tasks.Dispose();
+                    _tasks = null;
+                }
+            }
+
+            protected override IEnumerable<Task> GetScheduledTasks()
+            {
+                return _tasks.ToArray();
+            }
+
+            protected override void QueueTask(Task task)
+            {
+                _tasks.Add(task);
+            }
+
+            protected override bool TryExecuteTaskInline(Task task, bool taskWasPreviouslyQueued)
+            {
+                if (!taskWasPreviouslyQueued)
+                {
+                    return TryExecuteTask(task);
+                }
+
+                return false;
             }
         }
     }

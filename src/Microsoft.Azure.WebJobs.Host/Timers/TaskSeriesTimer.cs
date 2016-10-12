@@ -2,6 +2,7 @@
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
 using System;
+using System.Diagnostics;
 using System.Runtime.ExceptionServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -20,9 +21,10 @@ namespace Microsoft.Azure.WebJobs.Host.Timers
         private bool _stopped;
         private Task _run;
         private bool _disposed;
+        private TaskFactory _taskFactory;
 
         public TaskSeriesTimer(ITaskSeriesCommand command, IWebJobsExceptionHandler exceptionHandler,
-            Task initialWait)
+            Task initialWait, TaskFactory taskFactory = null)
         {
             if (command == null)
             {
@@ -43,6 +45,8 @@ namespace Microsoft.Azure.WebJobs.Host.Timers
             _exceptionHandler = exceptionHandler;
             _initialWait = initialWait;
             _cancellationTokenSource = new CancellationTokenSource();
+
+            _taskFactory = taskFactory ?? new TaskFactory();
         }
 
         public void Start()
@@ -54,7 +58,7 @@ namespace Microsoft.Azure.WebJobs.Host.Timers
                 throw new InvalidOperationException("The timer has already been started; it cannot be restarted.");
             }
 
-            _run = RunAsync(_cancellationTokenSource.Token);
+            _run = _taskFactory.StartNew(() => RunAsync(_cancellationTokenSource.Token)).Unwrap();
             _started = true;
         }
 
@@ -129,7 +133,23 @@ namespace Microsoft.Azure.WebJobs.Host.Timers
                     {
                         try
                         {
-                            await Task.WhenAny(wait, cancellationTaskSource.Task);
+                            Stopwatch sw = new Stopwatch();
+                            if (_command is SingletonManager.RenewLeaseCommand)
+                            {
+                                sw.Start();
+                            }
+
+                            await _taskFactory.ContinueWhenAny(new[] { wait, cancellationTaskSource.Task }, (t) =>
+                            {
+                                if (_command is SingletonManager.RenewLeaseCommand)
+                                {
+                                    sw.Stop();
+                                    if (sw.ElapsedMilliseconds > 10000)
+                                    {
+                                        bool match = wait == t;
+                                    }
+                                }
+                            }, CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Current);
                         }
                         catch (OperationCanceledException)
                         {
