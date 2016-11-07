@@ -398,6 +398,7 @@
     <Compile Include="Extensions\ExceptionExtensions.cs" />
     <Compile Include="FuncConverter.cs" />
     <Compile Include="FunctionTimeoutException.cs" />
+    <Compile Include="JobHostDispatcher.cs" />
     <Compile Include="Loggers\TraceEventExtensions.cs" />
     <Compile Include="Queues\Bindings\QueueBindingProvider.cs" />
     <Compile Include="Bindings\TraceWriter\TextWriterTraceAdapter.cs" />

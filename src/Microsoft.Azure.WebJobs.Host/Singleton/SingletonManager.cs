@@ -29,6 +29,7 @@ namespace Microsoft.Azure.WebJobs.Host
     {
         internal const string FunctionInstanceMetadataKey = "FunctionInstance";
         private readonly INameResolver _nameResolver;
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Performance", "CA1823:AvoidUnusedPrivateFields")]
         private readonly IWebJobsExceptionHandler _exceptionHandler;
         private readonly SingletonConfiguration _config;
         private readonly IStorageAccountProvider _accountProvider;
@@ -141,7 +142,7 @@ namespace Microsoft.Azure.WebJobs.Host
                 LeaseId = leaseId,
                 LockId = lockId,
                 Blob = lockBlob,
-                LeaseRenewalTimer = CreateLeaseRenewalTimer(lockBlob, leaseId, lockId, lockPeriod, _exceptionHandler)
+                LeaseRenewalTimer = CreateLeaseRenewalTimer(lockBlob, leaseId, lockId, lockPeriod)
             };
 
             // start the renewal timer, which ensures that we maintain our lease until
@@ -157,7 +158,7 @@ namespace Microsoft.Azure.WebJobs.Host
 
             if (singletonLockHandle.LeaseRenewalTimer != null)
             {
-                await singletonLockHandle.LeaseRenewalTimer.StopAsync(cancellationToken);
+                singletonLockHandle.LeaseRenewalTimer.Stop();
             }
 
             await ReleaseLeaseAsync(singletonLockHandle.Blob, singletonLockHandle.LeaseId, cancellationToken);
@@ -345,8 +346,7 @@ namespace Microsoft.Azure.WebJobs.Host
                     config.ListenerLockPeriod : config.LockPeriod;
         }
 
-        private ITaskSeriesTimer CreateLeaseRenewalTimer(IStorageBlockBlob leaseBlob, string leaseId, string lockId, TimeSpan leasePeriod,
-            IWebJobsExceptionHandler exceptionHandler)
+        private RenewLeaseCommand CreateLeaseRenewalTimer(IStorageBlockBlob leaseBlob, string leaseId, string lockId, TimeSpan leasePeriod)
         {
             // renew the lease when it is halfway to expiring   
             TimeSpan normalUpdateInterval = new TimeSpan(leasePeriod.Ticks / 2);
@@ -541,19 +541,18 @@ namespace Microsoft.Azure.WebJobs.Host
             public string LeaseId { get; set; }
             public string LockId { get; set; }
             public IStorageBlockBlob Blob { get; set; }
-            public ITaskSeriesTimer LeaseRenewalTimer { get; set; }
+            public RenewLeaseCommand LeaseRenewalTimer { get; set; }
         }
 
-        internal class RenewLeaseCommand : ITaskSeriesCommand
+        internal class RenewLeaseCommand
         {
             private readonly IStorageBlockBlob _leaseBlob;
             private readonly string _leaseId;
             private readonly string _lockId;
             private readonly IDelayStrategy _speedupStrategy;
             private readonly TraceWriter _trace;
-            private DateTimeOffset _lastRenewal;
-            private TimeSpan _lastRenewalLatency;
             private TimeSpan _leasePeriod;
+            private bool _running;
 
             public RenewLeaseCommand(IStorageBlockBlob leaseBlob, string leaseId, string lockId, IDelayStrategy speedupStrategy, TraceWriter trace, TimeSpan leasePeriod)
             {
@@ -566,23 +565,74 @@ namespace Microsoft.Azure.WebJobs.Host
                 _leasePeriod = leasePeriod;
             }
 
-            public async Task<TaskSeriesCommandResult> ExecuteAsync(CancellationToken cancellationToken)
+            public void Stop()
             {
-                TimeSpan delay;
+                _running = false;
+            }
 
-                try
+            public void Start()
+            {
+                _running = true;
+                JobHostDispatcher.BeginInvoke(() =>
                 {
-                    AccessCondition condition = new AccessCondition
+                    while (_running)
                     {
-                        LeaseId = _leaseId
-                    };
-                    DateTimeOffset requestStart = DateTimeOffset.UtcNow;
-                    await _leaseBlob.RenewLeaseAsync(condition, null, null, cancellationToken);
-                    _lastRenewal = DateTime.UtcNow;
-                    _lastRenewalLatency = _lastRenewal - requestStart;
+                        TimeSpan delay;
 
-                    // The next execution should occur after a normal delay.
-                    delay = _speedupStrategy.GetNextDelay(executionSucceeded: true);
+                        try
+                        {
+                            AccessCondition condition = new AccessCondition
+                            {
+                                LeaseId = _leaseId
+                            };
+                            DateTimeOffset requestStart = DateTimeOffset.UtcNow;
+                            _leaseBlob.SdkObject.RenewLease(condition);
+                            DateTime now = DateTime.UtcNow;
+
+                            string lastRenewalFormatted = _lastRenewal.ToString("yyyy-MM-ddTHH:mm:ss.FFFZ", CultureInfo.InvariantCulture);
+                            int millisecondsSinceLastSuccess = (int)(DateTime.UtcNow - _lastRenewal).TotalMilliseconds;
+                            int lastRenewalMilliseconds = (int)_lastRenewalLatency.TotalMilliseconds;
+
+                            _trace.Verbose(string.Format(CultureInfo.InvariantCulture, "Singleton lock renewal '{0}' on thread {1}. The last renewal completed at {2} ({3} milliseconds ago) with a duration of {4} milliseconds.",
+                                _lockId, Thread.CurrentThread.ManagedThreadId, lastRenewalFormatted, millisecondsSinceLastSuccess, lastRenewalMilliseconds));
+
+                            _lastRenewal = now;
+                            _lastRenewalLatency = _lastRenewal - requestStart;
+
+                            // The next execution should occur after a normal delay.
+                            delay = _speedupStrategy.GetNextDelay(executionSucceeded: true);
+                        }
+                        catch (StorageException exception)
+                        {
+                            if (exception.IsServerSideError())
+                            {
+                                // The next execution should occur more quickly (try to renew the lease before it expires).
+                                delay = _speedupStrategy.GetNextDelay(executionSucceeded: false);
+                                _trace.Warning(string.Format(CultureInfo.InvariantCulture, "Singleton lock renewal failed for blob '{0}' with error code {1}. Retry renewal in {2} milliseconds.",
+                                    _lockId, FormatErrorCode(exception), delay.TotalMilliseconds), source: TraceSource.Execution);
+                            }
+                            else
+                            {
+                                // Log the details we've been accumulating to help with debugging this scenario
+                                string lastRenewalFormatted = _lastRenewal.ToString("yyyy-MM-ddTHH:mm:ss.FFFZ", CultureInfo.InvariantCulture);
+                                int millisecondsSinceLastSuccess = (int)(DateTime.UtcNow - _lastRenewal).TotalMilliseconds;
+                                int lastRenewalMilliseconds = (int)_lastRenewalLatency.TotalMilliseconds;
+
+                                _trace.Error(string.Format(CultureInfo.InvariantCulture, "Singleton lock renewal failed for blob '{0}' with error code {1}. The last successful renewal completed at {2} ({3} milliseconds ago) with a duration of {4} milliseconds.",
+                                    _lockId, FormatErrorCode(exception), lastRenewalFormatted, millisecondsSinceLastSuccess, lastRenewalMilliseconds));
+
+                                // If we've lost the lease or cannot re-establish it, we want to fail any
+                                // in progress function execution
+                                throw;
+                            }
+                        }
+                        DateTime startSleep = DateTime.UtcNow;
+                        Thread.Sleep(delay);
+                        _trace.Verbose(string.Format(CultureInfo.InvariantCulture, "---- {0} ----", (int)(DateTime.UtcNow - startSleep).TotalMilliseconds));
+                    }
+                });
+            }
+
                 }
                 catch (StorageException exception)
                 {
