@@ -142,7 +142,7 @@ namespace Microsoft.Azure.WebJobs.Host
                 LeaseId = leaseId,
                 LockId = lockId,
                 Blob = lockBlob,
-                LeaseRenewalTimer = CreateLeaseRenewalTimer(lockBlob, leaseId, lockId, lockPeriod)
+                LeaseRenewalTimer = CreateLeaseRenewalTimer(lockBlob, leaseId, lockPeriod)
             };
 
             // start the renewal timer, which ensures that we maintain our lease until
@@ -346,13 +346,10 @@ namespace Microsoft.Azure.WebJobs.Host
                     config.ListenerLockPeriod : config.LockPeriod;
         }
 
-        private RenewLeaseCommand CreateLeaseRenewalTimer(IStorageBlockBlob leaseBlob, string leaseId, string lockId, TimeSpan leasePeriod)
+        private static RenewLeaseCommand CreateLeaseRenewalTimer(IStorageBlockBlob leaseBlob, string leaseId, TimeSpan leasePeriod)
         {
             // renew the lease when it is halfway to expiring   
-            TimeSpan normalUpdateInterval = new TimeSpan(leasePeriod.Ticks / 2);
-
-            IDelayStrategy speedupStrategy = new LinearSpeedupStrategy(normalUpdateInterval, MinimumLeaseRenewalInterval);
-            return new RenewLeaseCommand(leaseBlob, leaseId, lockId, speedupStrategy, _trace, leasePeriod);
+            return new RenewLeaseCommand(leaseBlob, leaseId, leasePeriod);
         }
 
         private async Task<string> TryAcquireLeaseAsync(IStorageBlockBlob blob, string proposedLeaseId, TimeSpan leasePeriod, CancellationToken cancellationToken)
@@ -547,140 +544,29 @@ namespace Microsoft.Azure.WebJobs.Host
         {
             private readonly IStorageBlockBlob _leaseBlob;
             private readonly string _leaseId;
-            private readonly string _lockId;
-            private readonly IDelayStrategy _speedupStrategy;
-            private readonly TraceWriter _trace;
             private TimeSpan _leasePeriod;
-            private DateTimeOffset _lastRenewal;
-            private TimeSpan _lastRenewalLatency;
-            private bool _running;
 
-            public RenewLeaseCommand(IStorageBlockBlob leaseBlob, string leaseId, string lockId, IDelayStrategy speedupStrategy, TraceWriter trace, TimeSpan leasePeriod)
+            public RenewLeaseCommand(IStorageBlockBlob leaseBlob, string leaseId, TimeSpan leasePeriod)
             {
-                _lastRenewal = DateTimeOffset.UtcNow;
                 _leaseBlob = leaseBlob;
                 _leaseId = leaseId;
-                _lockId = lockId;
-                _speedupStrategy = speedupStrategy;
-                _trace = trace;
                 _leasePeriod = leasePeriod;
             }
 
             public void Stop()
             {
-                _running = false;
+                _leaseBlob.ReleaseLeaseAsync(null, null, null, CancellationToken.None).GetAwaiter().GetResult();
             }
 
             public void Start()
             {
-                _running = true;
-                JobHostDispatcher.BeginInvoke(() =>
+                var connStr = AmbientConnectionStringProvider.Instance.GetConnectionString("AzureWebJobsStorage");
+                var startInfo = new ProcessStartInfo(@"E:\projects\WebJobTestApp\WebJobTestApp\bin\Debug\LockManager.exe", string.Format(CultureInfo.InvariantCulture, "{0} {1} {2} {3} {4}", _leaseBlob.Container.Name, _leaseBlob.Name, _leaseId, _leasePeriod.TotalMilliseconds / 2, connStr))
                 {
-                    var logger = new Logger();
-                    while (_running)
-                    {
-                        TimeSpan delay;
-
-                        try
-                        {
-                            AccessCondition condition = new AccessCondition
-                            {
-                                LeaseId = _leaseId
-                            };
-
-                            logger.Log("Begin Renew ");
-                            DateTimeOffset requestStart = DateTimeOffset.UtcNow;
-                            _leaseBlob.SdkObject.RenewLease(condition);
-                            DateTimeOffset requestFinish = DateTimeOffset.UtcNow;
-                            logger.Log("Finish Renew");
-
-                            _lastRenewalLatency = requestFinish - requestStart;
-
-                            //int lastRenewalMilliseconds = (int)_lastRenewalLatency.TotalMilliseconds;
-                            //int lastRenewalAgo = (int)(requestFinish - _lastRenewal).TotalMilliseconds;
-
-                            //_trace.Verbose(string.Format(CultureInfo.InvariantCulture, "Singleton lock renewal on thread {0}. {1} milliseconds since previous renewal. Latency of {2} milliseconds.",
-                            //    Thread.CurrentThread.ManagedThreadId, lastRenewalAgo, lastRenewalMilliseconds));
-
-                            _lastRenewal = requestFinish;
-
-                            // The next execution should occur after a normal delay.
-                            delay = _speedupStrategy.GetNextDelay(executionSucceeded: true);
-                        }
-                        catch (StorageException exception)
-                        {
-                            logger.Log("Exception   ");
-                            logger.Flush();
-
-                            if (exception.IsServerSideError())
-                            {
-                                // The next execution should occur more quickly (try to renew the lease before it expires).
-                                delay = _speedupStrategy.GetNextDelay(executionSucceeded: false);
-                                _trace.Warning(string.Format(CultureInfo.InvariantCulture, "Singleton lock renewal failed for blob '{0}' with error code {1}. Retry renewal in {2} milliseconds.",
-                                    _lockId, FormatErrorCode(exception), delay.TotalMilliseconds), source: TraceSource.Execution);
-                            }
-                            else
-                            {
-                                // Log the details we've been accumulating to help with debugging this scenario
-                                string lastRenewalFormatted = _lastRenewal.ToString("yyyy-MM-ddTHH:mm:ss.FFFZ", CultureInfo.InvariantCulture);
-                                int millisecondsSinceLastSuccess = (int)(DateTime.UtcNow - _lastRenewal).TotalMilliseconds;
-                                int lastRenewalMilliseconds = (int)_lastRenewalLatency.TotalMilliseconds;
-
-                                _trace.Error(string.Format(CultureInfo.InvariantCulture, "Singleton lock renewal failed for blob '{0}' with error code {1}. The last successful renewal completed at {2} ({3} milliseconds ago) with a duration of {4} milliseconds. Lease period is {5}.",
-                                    _lockId, FormatErrorCode(exception), lastRenewalFormatted, millisecondsSinceLastSuccess, lastRenewalMilliseconds, _leasePeriod));
-
-                                // If we've lost the lease or cannot re-establish it, we want to fail any
-                                // in progress function execution
-                                throw;
-                            }
-                        }
-
-                        logger.Log("Begin Timer ");
-                        Thread.Sleep(delay);
-                        logger.Log("Finish Timer");
-                    }
-                });
-            }
-
-            private static string FormatErrorCode(StorageException exception)
-            {
-                int statusCode;
-                if (!exception.TryGetStatusCode(out statusCode))
-                {
-                    return "''";
-                }
-
-                string message = statusCode.ToString(CultureInfo.InvariantCulture);
-
-                string errorCode = exception.GetErrorCode();
-
-                if (errorCode != null)
-                {
-                    message += ": " + errorCode;
-                }
-
-                return message;
-            }
-        }
-
-        private class Logger
-        {
-            private DateTime _last;
-
-            private string[] _logs = new string[20];
-            private int _count = 0;
-
-            public void Log(string note)
-            {
-                DateTime now = DateTime.UtcNow;
-                _logs[_count++ % 20] = string.Format(CultureInfo.InvariantCulture, "--- {0} | {1} milliseconds | {2}", DateTime.UtcNow.ToString("mm:ss.FFFZ", CultureInfo.InvariantCulture), (int)(now - _last).TotalMilliseconds, note);
-                _last = now;
-            }
-
-            public void Flush()
-            {
-                Console.WriteLine(string.Join(Environment.NewLine, _logs.OrderBy(s => s)));
-            }
-        }
+                    UseShellExecute = false
+                };
+                Process.Start(startInfo);
+            }        
+        }        
     }
 }
