@@ -561,12 +561,12 @@ namespace Microsoft.Azure.WebJobs.Host
             public void Start()
             {
                 var connStr = AmbientConnectionStringProvider.Instance.GetConnectionString("AzureWebJobsStorage");
-                var startInfo = new ProcessStartInfo(@"E:\projects\WebJobTestApp\WebJobTestApp\bin\Debug\LockManager.exe", string.Format(CultureInfo.InvariantCulture, "{0} {1} {2} {3} {4}", _leaseBlob.Container.Name, _leaseBlob.Name, _leaseId, _leasePeriod.TotalMilliseconds / 2, connStr))
+                var startInfo = new ProcessStartInfo(@"LockManager.exe", string.Format(CultureInfo.InvariantCulture, "{0} {1} {2} {3} {4}", _leaseBlob.Container.Name, _leaseBlob.Name, _leaseId, _leasePeriod.TotalMilliseconds / 2, connStr))
                 {
-                    UseShellExecute = false
+                    UseShellExecute = true
                 };
                 Process.Start(startInfo);
-            }        
-        }        
+            }
+        }
     }
 }
