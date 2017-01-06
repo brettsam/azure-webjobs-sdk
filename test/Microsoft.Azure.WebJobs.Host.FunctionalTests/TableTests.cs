@@ -46,14 +46,23 @@ namespace Microsoft.Azure.WebJobs.Host.FunctionalTests
             Utility.AssertIndexingError<BadProgram3>("Run", "Table entity types must implement the property PartitionKey.");
         }
 
-        [Fact]
-        public void Table_SingleOut_NotSupported()
+        class BindToSingleOutProgram
         {
-            // Not supported. This is inconsistent with the rest of the IAsyncCollector pattern
-            // Tracked by: https://github.com/Azure/azure-webjobs-sdk/issues/790
+            public static void Run([Table(TableName)] out Poco x)
+            {
+                x = new Poco { PartitionKey = PartitionKey, RowKey = RowKey, Property = "1234" };
+            }
+        }
 
-            Utility.AssertIndexingError<TableOutProgram>("Run", "Can't bind Table entity to type 'Microsoft.Azure.WebJobs.Host.FunctionalTests.TableTests+Poco&'.");
-            Utility.AssertIndexingError<TableOutArrayProgram>("Run", "Can't bind Table entity to type 'Microsoft.Azure.WebJobs.Host.FunctionalTests.TableTests+Poco[]&'.");
+        [Fact]
+        public void Table_SingleOut_Supported()
+        {
+            IStorageAccount account = new FakeStorageAccount();
+            var host = TestHelpers.NewJobHost<BindToSingleOutProgram>(account);
+
+            host.Call("Run");
+
+            AssertStringProperty(account, "Property", "1234");
         }
 
         // Helper to demonstrate that TableName property can include { } pairs. 
@@ -81,20 +90,30 @@ namespace Microsoft.Azure.WebJobs.Host.FunctionalTests
             AssertStringProperty(account, "Property", "456", "ZZxZZ");
         }
 
+        private class CustomTableBindingConverter<T>
+        {
+            public CustomTableBinding<T> Convert(CloudTable input)
+            {
+                return new CustomTableBinding<T>(input);
+            }
+        }
+
         [Fact]
         public void Table_IfBoundToCustomTableBindingExtension_BindsCorrectly()
         {
             // Arrange
             IStorageAccount account = CreateFakeStorageAccount();
-            IStorageQueue triggerQueue = CreateQueue(account, TriggerQueueName);
-            triggerQueue.AddMessage(triggerQueue.CreateMessage("ignore"));
 
-            // register our custom table binding extension provider
-            DefaultExtensionRegistry extensions = new DefaultExtensionRegistry();
-            extensions.RegisterExtension<IArgumentBindingProvider<ITableArgumentBinding>>(new CustomTableArgumentBindingProvider());
+            var config = TestHelpers.NewConfig(typeof(CustomTableBindingExtensionProgram), account);
 
-            // Act
-            RunTrigger(account, typeof(CustomTableBindingExtensionProgram), extensions);
+            IConverterManager cm = config.GetService<IConverterManager>();
+
+            // Add a rule for binding CloudTable --> CustomTableBinding<TEntity>
+            cm.AddConverterBuilder<CloudTable, CustomTableBinding<OpenType>, TableAttribute>(
+                typeof(CustomTableBindingConverter<>));
+
+            var host = new TestJobHost<CustomTableBindingExtensionProgram>(config);
+            host.Call("Run"); // Act
 
             // Assert
             Assert.Equal(TableName, CustomTableBinding<Poco>.Table.Name);
@@ -498,8 +517,7 @@ namespace Microsoft.Azure.WebJobs.Host.FunctionalTests
 
         private class CustomTableBindingExtensionProgram
         {
-            public static void Run([QueueTrigger(TriggerQueueName)] CloudQueueMessage ignore,
-                [Table(TableName)] CustomTableBinding<Poco> table)
+            public static void Run([Table(TableName)] CustomTableBinding<Poco> table)
             {
                 Poco entity = new Poco();
                 table.Add(entity);

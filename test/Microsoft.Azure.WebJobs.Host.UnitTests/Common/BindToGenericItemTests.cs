@@ -36,23 +36,34 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests.Common
             public string Path { get; set; }
         }
 
+        // Represents the native type from this resource's SDK.  
+        // for example, CloudMessage, ITableEntity, CloudBlob. 
+        // ConverterManager will then convert to the type in the user's signature. 
+        private class NativeSdkType
+        {
+            public TestAttribute _attr;
+            public FakeExtClient _client;
+        }
+
         public class FakeExtClient : IExtensionConfigProvider
         {
+
+            private Widget Convert(NativeSdkType i)
+            {
+                return Widget.New(i._attr);
+            }
+
             public void Initialize(ExtensionConfigContext context)
             {
                 var bf = context.Config.BindingFactory;
 
-                // Add [Test] support                
-                var rule = bf.BindToGenericItem<TestAttribute>(Builder);
-                context.RegisterBindingRules<TestAttribute>(rule);
-            }
+                bf.ConverterManager.AddConverterBuilder<NativeSdkType, Widget, TestAttribute>(this);
 
-            private Task<object> Builder(TestAttribute attrResolved, Type parameterType)
-            {
-                var method = parameterType.GetMethod("New", BindingFlags.Static | BindingFlags.Public);
-                var obj = method.Invoke(null, new object[] { attrResolved });
-                return Task.FromResult(obj);
-            }
+                // Add [Test] support                
+                var rule = bf.BindToGeneralAsyncType<TestAttribute, NativeSdkType>(
+                    (attr) => Task.FromResult(new NativeSdkType { _attr = attr, _client = this }));
+                context.RegisterBindingRules<TestAttribute>(rule);
+            }            
         }
 
         public class Program

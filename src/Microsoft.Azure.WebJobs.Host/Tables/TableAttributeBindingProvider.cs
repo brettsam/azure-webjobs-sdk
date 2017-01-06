@@ -2,12 +2,15 @@
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
 using System;
+using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Azure.WebJobs.Host.Bindings;
+using Microsoft.Azure.WebJobs.Host.Converters;
 using Microsoft.Azure.WebJobs.Host.Executors;
+using Microsoft.Azure.WebJobs.Host.Protocols;
 using Microsoft.Azure.WebJobs.Host.Storage;
 using Microsoft.Azure.WebJobs.Host.Storage.Table;
 using Microsoft.WindowsAzure.Storage.Table;
@@ -17,7 +20,6 @@ namespace Microsoft.Azure.WebJobs.Host.Tables
 {
     internal class TableAttributeBindingProvider : IBindingProvider
     {
-        private readonly IStorageTableArgumentBindingProvider _tableBindingProvider;
         private readonly ITableEntityArgumentBindingProvider _entityBindingProvider;
 
         private readonly INameResolver _nameResolver;
@@ -38,21 +40,13 @@ namespace Microsoft.Azure.WebJobs.Host.Tables
             _nameResolver = nameResolver;
             _accountProvider = accountProvider;
 
-            _tableBindingProvider = new CompositeArgumentBindingProvider(
-                new StorageTableArgumentBindingProvider(),
-                new CloudTableArgumentBindingProvider(),
-                new QueryableArgumentBindingProvider(),
-                new CollectorArgumentBindingProvider(),
-                new AsyncCollectorArgumentBindingProvider(),
-                new TableArgumentBindingExtensionProvider(extensions));
-
             _entityBindingProvider =
                 new CompositeEntityArgumentBindingProvider(
                 new TableEntityArgumentBindingProvider(),
                 new PocoEntityArgumentBindingProvider()); // Supports all types; must come after other providers
         }
 
-        // [Table] has some pre-existing behavior where the storage account can be specified outside of the [Queue] attribute. 
+        // [Table] has some pre-existing behavior where the storage account can be specified outside of the [Table] attribute. 
         // The storage account is pulled from the ParameterInfo (which could pull in a [Storage] attribute on the container class)
         // Resolve everything back down to a single attribute so we can use the binding helpers. 
         // This pattern should be rare since other extensions can just keep everything directly on the primary attribute. 
@@ -68,32 +62,106 @@ namespace Microsoft.Azure.WebJobs.Host.Tables
 
             return new ResolvedTableAttribute(attrResolved, client);
         }
-        
+
         public static IBindingProvider Build(INameResolver nameResolver, IConverterManager converterManager, IStorageAccountProvider accountProvider, IExtensionRegistry extensions)
         {
             var original = new TableAttributeBindingProvider(nameResolver, accountProvider, extensions);
 
-            converterManager.AddConverter<JObject, ITableEntity, TableAttribute>(original.JObjectToTableEntityConverterFunc);
+            converterManager.AddConverter<JObject, ITableEntity, TableAttribute>(original.JObjectToTableEntityConverterFunc);            
+            converterManager.AddConverterBuilder<object, ITableEntity, TableAttribute>(typeof(Object2ITableEntityConverter<>));
 
+            // IStorageTable --> IQueryable<ITableEntity>
+            converterManager.AddConverterBuilder<IStorageTable, IQueryable<OpenType>, TableAttribute>(typeof(Table2IQueryableConverter<>));
+            
             var bindingFactory = new BindingFactory(nameResolver, converterManager);
-            var bindAsyncCollector = bindingFactory.BindToAsyncCollector<TableAttribute, ITableEntity>(original.BuildFromTableAttribute, null, original.CollectAttributeInfo);
 
-            var bindToJobject = bindingFactory.BindToExactAsyncType<TableAttribute, JObject>(original.BuildJObject, null, original.CollectAttributeInfo);
-            var bindToJArray = bindingFactory.BindToExactAsyncType<TableAttribute, JArray>(original.BuildJArray, null, original.CollectAttributeInfo);
+            var bindToExactCloudTable = bindingFactory.BindToGeneralAsyncType<TableAttribute, CloudTable>(
+                original.BindToCloudTable,
+                original.ToParameterDescriptorForCollector,
+                original.CollectAttributeInfo);
 
-            // Filter to just support JObject, and use legacy bindings for everything else. 
-            // Once we have ITableEntity converters for pocos, we can remove the filter. 
-            // https://github.com/Azure/azure-webjobs-sdk/issues/887
-            bindAsyncCollector = bindingFactory.AddFilter<TableAttribute>(
-                (attr, type) => (type == typeof(IAsyncCollector<JObject>) || type == typeof(ICollector<JObject>)), 
-                bindAsyncCollector); 
+            // Includes converter manager, which provides access to IQueryable<ITableEntity>
+            var bindToExactTestCloudTable = bindingFactory.BindToGeneralAsyncType<TableAttribute, IStorageTable>(
+                original.BindToTestCloudTable,
+                original.ToParameterDescriptorForCollector,
+                original.CollectAttributeInfo);
+
+            var bindAsyncCollector = bindingFactory.BindToAsyncCollector<TableAttribute, ITableEntity>(
+                original.BuildFromTableAttribute,
+                null,
+                original.CollectAttributeInfo);
+
+            var bindToJobject = bindingFactory.BindToExactAsyncType<TableAttribute, JObject>(
+                original.BuildJObject,
+                null,
+                original.CollectAttributeInfo);
+
+            var bindToJArray = bindingFactory.BindToExactAsyncType<TableAttribute, JArray>(
+                original.BuildJArray,
+                null,
+                original.CollectAttributeInfo);
 
             var bindingProvider = new GenericCompositeBindingProvider<TableAttribute>(
-                new IBindingProvider[] { bindToJArray, bindToJobject, bindAsyncCollector, original });
+                ValidateAttribute, nameResolver,
+                new IBindingProvider[]
+                {
+                    AllowMultipleRows(bindingFactory, bindAsyncCollector),
+                    AllowMultipleRows(bindingFactory, bindToExactCloudTable),
+                    AllowMultipleRows(bindingFactory, bindToExactTestCloudTable),
+                    bindToJArray,
+                    bindToJobject,
+                    original
+                });
 
             return bindingProvider;
         }
         
+        // Binding rule only allowed on attributes that don't specify the RowKey. 
+        private static IBindingProvider AllowMultipleRows(BindingFactory bf, IBindingProvider innerProvider)
+        {
+            return bf.AddFilter<TableAttribute>((attr, type) => attr.RowKey == null, innerProvider);
+        }
+
+        private ParameterDescriptor ToParameterDescriptorForCollector(TableAttribute attribute, ParameterInfo parameter, INameResolver nameResolver)
+        {
+            Task<IStorageAccount> t = Task.Run(() =>
+                _accountProvider.GetStorageAccountAsync(parameter, CancellationToken.None, nameResolver));
+            IStorageAccount account = t.GetAwaiter().GetResult();
+            string accountName = account.Credentials.AccountName;
+
+            return new TableParameterDescriptor
+            {
+                Name = parameter.Name,
+                AccountName = accountName,
+                TableName = Resolve(attribute.TableName),
+                Access = FileAccess.ReadWrite
+            };
+        }
+
+        private Task<IStorageTable> BindToTestCloudTable(TableAttribute attribute)
+        {
+            IStorageTable table = GetTable(attribute);
+            return Task.FromResult(table);
+        }
+
+        private async Task<CloudTable> BindToCloudTable(TableAttribute attribute)
+        {
+            IStorageTable table = GetTable(attribute);
+            await table.CreateIfNotExistsAsync(CancellationToken.None);
+
+            var sdkTable = table.SdkObject;
+            return sdkTable;
+        }
+
+        private static void ValidateAttribute(TableAttribute attribute, Type parameterType)
+        {
+            // Queue pre-existing  behavior: if there are { }in the path, then defer validation until runtime. 
+            if (!attribute.TableName.Contains("{"))
+            {
+                TableClient.ValidateAzureTableName(attribute.TableName);
+            }
+        }
+
         private async Task<JObject> BuildJObject(TableAttribute attribute)
         {
             IStorageTable table = GetTable(attribute);
@@ -218,18 +286,10 @@ namespace Microsoft.Azure.WebJobs.Host.Tables
 
             if (bindsToEntireTable)
             {
-                IBindableTablePath path = BindableTablePath.Create(tableName);
-                path.ValidateContractCompatibility(context.BindingDataContract);
-
-                IStorageTableArgumentBinding argumentBinding = _tableBindingProvider.TryCreate(parameter);
-
-                if (argumentBinding == null)
-                {
-                    throw new InvalidOperationException("Can't bind Table to type '" + parameter.ParameterType + "'.");
-                }
-
-                binding = new TableBinding(parameter.Name, argumentBinding, client, path);
-            }
+                // This should have been caught by the other rule-based binders. 
+                // We never except this to get thrown. 
+                throw new InvalidOperationException("Can't bind Table to type '" + parameter.ParameterType + "'.");
+            }            
             else
             {
                 string partitionKey = Resolve(tableAttribute.PartitionKey);
@@ -364,6 +424,62 @@ namespace Microsoft.Azure.WebJobs.Host.Tables
             }
 
             internal IStorageTableClient Client { get; private set; }
+        }
+
+        // IStorageTable --> IQueryable<T>
+        // ConverterManager's pattern matcher will figure out TElement. 
+        private class Table2IQueryableConverter<TElement> where TElement : ITableEntity, new()
+        {
+            public Table2IQueryableConverter()
+            {
+                // We're now commited to an IQueryable. Verify other constraints. 
+                Type entityType = typeof(TElement);
+
+                if (!TableClient.ImplementsITableEntity(entityType))
+                {
+                    throw new InvalidOperationException("IQueryable is only supported on types that implement ITableEntity.");
+                }
+
+                TableClient.VerifyDefaultConstructor(entityType);
+            }
+
+            public IQueryable<TElement> Convert(IStorageTable value)
+            {
+                // If Table does not exist, treat it like have zero rows. 
+                // This means return an non-null but empty enumerable.
+                // SDK doesn't do that, so we need to explicitly check. 
+                Task<bool> t = Task.Run(() => value.ExistsAsync(CancellationToken.None));
+                bool exists = t.GetAwaiter().GetResult();
+
+                if (!exists)
+                {
+                    return Enumerable.Empty<TElement>().AsQueryable();
+                }
+                else
+                {
+                    return value.CreateQuery<TElement>();
+                }
+            }
+        }
+
+        // Convert from T --> ITableEntity
+        private class Object2ITableEntityConverter<TElement>
+        {
+            private static readonly IConverter<TElement, ITableEntity> Converter = PocoToTableEntityConverter<TElement>.Create();
+
+            public Object2ITableEntityConverter()
+            {
+                // JObject case should have been claimed by another converter. 
+                // So we can statically enforce an ITableEntity compatible contract
+                var t = typeof(TElement);
+                TableClient.VerifyContainsProperty(t, "RowKey");
+                TableClient.VerifyContainsProperty(t, "PartitionKey");
+            }
+
+            public ITableEntity Convert(TElement item)
+            {
+                return Converter.Convert(item);
+            }
         }
     }
 }

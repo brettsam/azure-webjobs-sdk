@@ -9,6 +9,9 @@ using Microsoft.Azure.WebJobs.Host.Bindings;
 using Newtonsoft.Json.Linq;
 using System.Threading;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
+using System.Reflection;
+using System.Collections.Generic;
 
 namespace Microsoft.Azure.WebJobs.Host.UnitTests
 {
@@ -195,6 +198,199 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests
             Assert.NotNull(func2);
             var x2 = func2(new Wrapper { Value = "x" }, new TestAttribute2("y"), Context);
             Assert.Equal("[common:x]", x2);
+        }
+
+
+        // Test converter using Open generic types
+        class TypeConverter2<TInput, TOutput>
+        {
+            public TypeConverter2(ConverterManagerTests config)
+            { 
+                // We know this is only used by a single test invoking with this combination of params.
+                Assert.Equal(typeof(String), typeof(TInput));
+                Assert.Equal(typeof(int), typeof(TOutput));
+
+                config._counter++;
+            }
+
+            public TOutput Convert(TInput input)
+            {
+                var str = (string)(object)input;
+                return (TOutput)(object)int.Parse(str);
+            }
+        }
+
+        [Fact]
+        public void OpenType2()
+        {
+            Assert.Equal(0, _counter);
+            var cm = new ConverterManager();
+
+            // Register a converter builder. 
+            // Builder runs once; converter runs each time.
+            // Uses open type to match. 
+            cm.AddConverterBuilder<TypeWrapperIsString, int, Attribute>(typeof(TypeConverter2<,>), this);
+
+            var converter = cm.GetConverter<string, int, Attribute>();
+
+            Assert.Equal(12, converter("12", new TestAttribute(null), null));
+            Assert.Equal(34, converter("34", new TestAttribute(null), null));
+
+            Assert.Equal(1, _counter); // converterBuilder is only called once. 
+
+            // 'char' as src parameter doesn't match the type predicate. 
+            Assert.Null(cm.GetConverter<char, int, Attribute>());
+        }
+
+
+        // Test converter using Open generic types, rearranging generics
+        class TypeConverter5<TElement>
+        {
+            public IEnumerable<TElement> Convert(TElement input)
+            {
+                // Trivial rule. 
+                return new TElement[] { input, input, input };
+            }
+        }
+
+        [Fact]
+        public void OpenType5()
+        {
+            var cm = new ConverterManager();
+
+            // Register a converter builder. 
+            // Builder runs once; converter runs each time.
+            // Uses open type to match. 
+            // Also test the IEnumerable<OpenType> pattern. 
+            cm.AddConverterBuilder<OpenType, IEnumerable<OpenType>, Attribute>(typeof(TypeConverter5<>));
+
+            var attr = new TestAttribute(null);
+
+            {
+                var converter = cm.GetConverter<int, IEnumerable<int>, Attribute>();
+                Assert.Equal(new int[] { 1, 1, 1 }, converter(1, attr, null));
+            }
+
+            {
+                var converter = cm.GetConverter<string, IEnumerable<string>, Attribute>();
+                Assert.Equal(new string[] { "a", "a", "a" }, converter("a", attr, null));
+            }
+
+            // verify doesn't match 
+            // $$$ Rule above is too general, already claimed this. 
+            //Assert.Null(cm.GetConverter<char, IEnumerable<int>, Attribute>());
+        }
+
+        // Test converter using concrete types. 
+        class TypeConverter3
+        {
+            public TypeConverter3(ConverterManagerTests config)
+            {
+                config._counter++;
+            }      
+
+            public int Convert(string input)
+            {
+                return int.Parse(input);
+            }
+        }
+
+        // Counter used by tests to verify that converter ctors are only run once and then shared across 
+        // multiple invocations. 
+        private int _counter;
+
+        // Converter discovered for OpenType4 test. Used directly. 
+        public int ConvertForOpenType4Test(string input)
+        {
+            return int.Parse(input);
+        }
+
+        [Fact]
+        public void OpenType4()
+        {
+            Assert.Equal(0, _counter);
+            var cm = new ConverterManager();
+
+            // Register a converter builder. 
+            // Builder runs once; converter runs each time.
+            // Uses open type to match. 
+            cm.AddConverterBuilder<TypeWrapperIsString, int, Attribute>(this);
+
+            var converter = cm.GetConverter<string, int, Attribute>();
+
+            Assert.Equal(12, converter("12", new TestAttribute(null), null));
+            Assert.Equal(34, converter("34", new TestAttribute(null), null));
+
+            Assert.Equal(0, _counter); // passed in instantiated object; counter never incremented. 
+
+            // 'char' as src parameter doesn't match the type predicate. 
+            Assert.Null(cm.GetConverter<char, int, Attribute>());
+        }
+
+
+        [Fact]
+        public void OpenType3()
+        {
+            Assert.Equal(0, _counter);
+            var cm = new ConverterManager();
+
+            // Register a converter builder. 
+            // Builder runs once; converter runs each time.
+            // Uses open type to match. 
+            cm.AddConverterBuilder<TypeWrapperIsString, int, Attribute>(typeof(TypeConverter3), this);
+
+            var converter = cm.GetConverter<string, int, Attribute>();
+
+            Assert.Equal(12, converter("12", new TestAttribute(null), null));
+            Assert.Equal(34, converter("34", new TestAttribute(null), null));
+
+            Assert.Equal(1, _counter); // converterBuilder is only called once. 
+
+            // 'char' as src parameter doesn't match the type predicate. 
+            Assert.Null(cm.GetConverter<char, int, Attribute>());
+        }
+
+        [Fact]
+        public void OpenType()
+        {
+            int count = 0;
+            var cm = new ConverterManager();
+
+            // Register a converter builder. 
+            // Builder runs once; converter runs each time.
+            // Uses open type to match. 
+            cm.AddConverterBuilder<TypeWrapperIsString, int, Attribute>(
+                (typeSrc, typeDest) =>
+                {
+                    count++;
+                    Assert.Equal(typeof(String), typeSrc);
+                    Assert.Equal(typeof(int), typeDest);
+
+                    return (input) =>
+                    {
+                        string s = (string)input;
+                        return int.Parse(s);
+                    };
+                });
+
+            var converter = cm.GetConverter<string, int, Attribute>();
+            Assert.NotNull(converter);
+            Assert.Equal(12, converter("12", new TestAttribute(null), null));
+            Assert.Equal(34, converter("34", new TestAttribute(null), null));            
+
+            Assert.Equal(1, count); // converterBuilder is only called once. 
+
+            // 'char' as src parameter doesn't match the type predicate. 
+            Assert.Null(cm.GetConverter<char, int, Attribute>());
+        }
+
+        class TypeWrapperIsString : OpenType
+        {
+            // Predicate is invoked by ConverterManager to determine if a type matches. 
+            public override bool IsMatch(Type t)
+            {
+                return t == typeof(string);
+            }
         }
 
         // Custom type
