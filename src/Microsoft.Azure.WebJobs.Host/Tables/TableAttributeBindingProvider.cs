@@ -443,13 +443,12 @@ namespace Microsoft.Azure.WebJobs.Host.Tables
                 TableClient.VerifyDefaultConstructor(entityType);
             }
 
-            public IQueryable<TElement> Convert(IStorageTable value)
+            public async Task<IQueryable<TElement>> ConvertAsync(IStorageTable value)
             {
                 // If Table does not exist, treat it like have zero rows. 
                 // This means return an non-null but empty enumerable.
                 // SDK doesn't do that, so we need to explicitly check. 
-                Task<bool> t = Task.Run(() => value.ExistsAsync(CancellationToken.None));
-                bool exists = t.GetAwaiter().GetResult();
+                bool exists = await value.ExistsAsync(CancellationToken.None);
 
                 if (!exists)
                 {

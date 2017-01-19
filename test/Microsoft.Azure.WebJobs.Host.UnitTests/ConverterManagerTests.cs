@@ -384,6 +384,34 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests
             Assert.Null(cm.GetConverter<char, int, Attribute>());
         }
 
+
+        // Test with async converter 
+        public class UseAsyncConverter
+        {
+            public Task<string> Convert(int i)
+            {
+                return Task.FromResult(i.ToString());
+            }
+        }
+
+        [Fact]
+        public void UseUseAsyncConverterTest()
+        {
+            var cm = new ConverterManager();
+
+            // Register a converter builder. 
+            // Builder runs once; converter runs each time.
+            // Uses open type to match. 
+            cm.AddConverterBuilder<int, string, Attribute>(typeof(UseAsyncConverter));
+
+            var converter = cm.GetConverter<int, string, Attribute>();
+
+            Assert.Equal("12", converter(12, new TestAttribute(null), null));
+
+            // 'char' as src parameter doesn't match the type predicate. 
+            // Assert.Null(cm.GetConverter<int, Task<string>, Attribute>()); $$$
+        }
+
         class TypeWrapperIsString : OpenType
         {
             // Predicate is invoked by ConverterManager to determine if a type matches. 
