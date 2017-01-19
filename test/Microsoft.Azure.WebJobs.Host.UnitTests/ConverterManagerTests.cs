@@ -394,22 +394,116 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests
             }
         }
 
+        // Test non-generic Task<string>, use instance match. 
         [Fact]
         public void UseUseAsyncConverterTest()
         {
             var cm = new ConverterManager();
 
-            // Register a converter builder. 
-            // Builder runs once; converter runs each time.
-            // Uses open type to match. 
-            cm.AddConverterBuilder<int, string, Attribute>(typeof(UseAsyncConverter));
+            cm.AddConverterBuilder<int, string, Attribute>(new UseAsyncConverter());
+
+            var converter = cm.GetConverter<int, string, Attribute>();
+
+            Assert.Equal("12", converter(12, new TestAttribute(null), null));            
+        }
+
+        // Test with async converter 
+        public class UseGenericAsyncConverter<T>
+        {
+            public Task<T> Convert(int i)
+            {
+                Assert.Equal(typeof(string), typeof(T));
+                return Task.FromResult((T) (object) i.ToString());
+            }
+        }
+
+        // Test generic Task<T>, use typing match. 
+        [Fact]
+        public void UseGenericAsyncConverterTest()
+        {
+            var cm = new ConverterManager();
+
+            cm.AddConverterBuilder<int, string, Attribute>(typeof(UseGenericAsyncConverter<>));
 
             var converter = cm.GetConverter<int, string, Attribute>();
 
             Assert.Equal("12", converter(12, new TestAttribute(null), null));
+        }
 
-            // 'char' as src parameter doesn't match the type predicate. 
-            // Assert.Null(cm.GetConverter<int, Task<string>, Attribute>()); $$$
+
+        private class TestConverter5
+        {
+            public IFakeEntity Convert(JObject obj)
+            {
+                return new MyFakeEntity { Property = obj["Property1"].ToString() };
+            }
+        }
+
+        private class TestConverter5<T>
+        {
+            public IFakeEntity Convert(T item)
+            {
+                Assert.IsType<PocoEntity>(item); // test only calls this with PocoEntity 
+                var d = (PocoEntity) (object) item;
+                string propValue = d.Property2;
+                return new MyFakeEntity { Property = propValue };
+            }
+        }
+
+        // Test sort of rules that we have in tables. 
+        // Rules can overlap, so make sure that the right rule is dispatched. 
+        // Poco is a base class of  Jobject and IFakeEntity.
+        // Give each rule its own unique converter and ensure each converter is called.  
+        [Fact]
+        public void Test()
+        {
+            var cm = new ConverterManager();
+
+            // Derived<ITableEntity> --> IFakeEntity  [automatic] 
+            // JObject --> IFakeEntity
+            // Poco --> IFakeEntity
+            cm.AddConverterBuilder<JObject, IFakeEntity, Attribute>(typeof(TestConverter5));
+            cm.AddConverterBuilder<OpenType, IFakeEntity, Attribute>(typeof(TestConverter5<>));
+
+            {
+                var converter = cm.GetConverter<IFakeEntity, IFakeEntity, Attribute>();
+                var src = new MyFakeEntity { Property = "123" };
+                var dest = converter(src, null, null);
+                Assert.Same(src, dest); // should be exact same instance - no conversion 
+            }
+
+            {
+                var converter = cm.GetConverter<JObject, IFakeEntity, Attribute>();
+                JObject obj = new JObject();
+                obj["Property1"] = "456";
+                var dest = converter(obj, null, null);
+                Assert.Equal("456", dest.Property);
+            }
+
+            {
+                var converter = cm.GetConverter<PocoEntity, IFakeEntity, Attribute>();
+                var src = new PocoEntity { Property2 = "789" };                
+                var dest = converter(src, null, null);
+                Assert.Equal("789", dest.Property);
+            }
+        }
+
+        // Class that implements IFakeEntity. Test conversions.  
+        class MyFakeEntity : IFakeEntity
+        {
+            public string Property { get; set; }
+        }
+
+        interface IFakeEntity
+        {
+            string Property { get; }
+        }
+
+        // Poco class that can be converted to IFakeEntity, but doesn't actually implement IFakeEntity. 
+        class PocoEntity
+        {
+            // Give a different property name so that we can enforce the exact converter.
+            public string Property2 { get; set; }
         }
 
         class TypeWrapperIsString : OpenType
