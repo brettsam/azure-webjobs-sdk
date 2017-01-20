@@ -138,6 +138,42 @@ namespace Microsoft.Azure.WebJobs.Host.Bindings
         }
 
         /// <summary>
+        /// $$$ 
+        /// </summary>
+        /// <typeparam name="TAttribute"></typeparam>
+        /// <typeparam name="TType"></typeparam>
+        /// <param name="allowConversions"></param>
+        /// <param name="typeBuilder"></param>
+        /// <param name="constructorArgs"></param>
+        /// <returns></returns>
+        public IBindingProvider BindToInput<TAttribute, TType>(
+            bool allowConversions,
+            Type typeBuilder,
+            params object[] constructorArgs)
+                where TAttribute : Attribute
+        {
+            var cm = allowConversions ? this._converterManager : null;
+            return new ClassX<TAttribute, TType>(this._nameResolver, cm, typeBuilder, constructorArgs);
+        }
+
+        #if false  // $$$$
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <typeparam name="TAttribute"></typeparam>
+        /// <typeparam name="TType"></typeparam>
+        /// <param name="allowConversions"></param>
+        /// <param name="builderInstance"></param>
+        /// <returns></returns>
+        public IBindingProvider BindToInput<TAttribute, TType>(
+            bool allowConversions,
+            object builderInstance)
+        {
+
+        }
+#endif
+
+        /// <summary>
         /// Create a binding provider that binds to the user parameter type. This skips the converter manager. 
         /// </summary>
         /// <param name="builder">Builder function that takes (resolved attribute, user parameter type) and returns an object that is assigned to the user parameter type.</param>

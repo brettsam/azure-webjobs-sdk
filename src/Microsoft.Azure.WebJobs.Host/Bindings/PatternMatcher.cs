@@ -63,6 +63,28 @@ namespace Microsoft.Azure.WebJobs.Host.Bindings
                 typeSource.Name + " to " + typeDest.Name);
         }
 
+        // Create an instance for method.DeclaringType, passing constructorArgs.
+        public static Func<object, object> CreateInstanceAndGetConverterFunc(
+            object[] constructorArgs, 
+            MethodInfo method)
+        {
+            // typeConverter may have open generic types.  method has now resolved those types. 
+            var declaringType = method.DeclaringType;
+
+            object converterInstance;
+            try
+            {
+                // common for constructor to throw validation errors.          
+                converterInstance = Activator.CreateInstance(declaringType, constructorArgs);
+            }
+            catch (TargetInvocationException e)
+            {
+                throw e.InnerException;
+            }
+
+            return PatternMatcher.GetConverterFunc(converterInstance, method);
+        }
+
         // Once we've selected a converter Method and instance to call it on, get a delegate for the method. 
         public static Func<object, object> GetConverterFunc(object instance, MethodInfo method)
         {

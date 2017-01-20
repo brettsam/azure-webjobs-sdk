@@ -36,21 +36,9 @@ namespace Microsoft.Azure.WebJobs.Host.Bindings
             converterManager.AddConverterBuilder<TSource, TDestination, TAttribute>((typeSource, typeDest) =>
             {
                 var method = PatternMatcher.FindConverterMethod(typeConverter, typeSource, typeDest);
-                // typeConverter may have open generic types.  method has now resolved those types. 
-                var declaringType = method.DeclaringType;
 
-                object converterInstance;
-                try
-                {
-                    // common for constructor to throw validation errors.          
-                    converterInstance = Activator.CreateInstance(declaringType, constructorArgs);
-                }
-                catch (TargetInvocationException e)
-                {
-                    throw e.InnerException;
-                }
-
-                return PatternMatcher.GetConverterFunc(converterInstance, method);
+                var converter = PatternMatcher.CreateInstanceAndGetConverterFunc(constructorArgs, method);
+                return converter; 
             });
         }
 

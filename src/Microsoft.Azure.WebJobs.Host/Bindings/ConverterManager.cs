@@ -69,15 +69,26 @@ namespace Microsoft.Azure.WebJobs
             return typeof(TSrc).FullName + "|" + typeof(TDest).FullName + "|" + typeof(TAttribute).FullName;
         }
 
+        internal static OpenType GetTypeValidator<T>()
+        {
+            var openType = GetOpenType<T>();
+            if (openType != null)
+            {
+                return openType;
+            }
+            
+            return new ExactMatch(typeof(T));            
+        }
+
         // Gets an OpenType from the given argument. 
         // Return null if it's a concrete type (ie, not an open type).  
-        private OpenType GetOpenType<T>()
+        private static OpenType GetOpenType<T>()
         {
             var t = typeof(T);
             return GetOpenType(t);
         }
 
-        private OpenType GetOpenType(Type t)
+        private static OpenType GetOpenType(Type t)
         {
             if (t == typeof(OpenType) || t == typeof(object))
             {
