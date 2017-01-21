@@ -275,10 +275,6 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests
                 var converter = cm.GetConverter<string, IEnumerable<string>, Attribute>();
                 Assert.Equal(new string[] { "a", "a", "a" }, converter("a", attr, null));
             }
-
-            // verify doesn't match 
-            // $$$ Rule above is too general, already claimed this. 
-            //Assert.Null(cm.GetConverter<char, IEnumerable<int>, Attribute>());
         }
 
         // Test converter using concrete types. 

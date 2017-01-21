@@ -16,19 +16,16 @@ namespace Microsoft.Azure.WebJobs.Host.Bindings
     {
         private readonly INameResolver _nameResolver;
         private readonly IConverterManager _converterManager;
-        private readonly Type _typeBuilder;
-        private readonly object[] _constructorArgs;
-
+        private readonly PatternMatcher _patternMatcher; 
+        
         public BindToInputBindingProvider(
             INameResolver nameResolver,
             IConverterManager converterManager,
-            Type typeBuilder,
-            object[] constructorArgs)
+            PatternMatcher patternMatcher)
         {
             this._nameResolver = nameResolver;
             this._converterManager = converterManager; // could be null 
-            this._typeBuilder = typeBuilder;
-            this._constructorArgs = constructorArgs;
+            this._patternMatcher = patternMatcher;
         }
 
         public Task<IBinding> TryCreateAsync(BindingProviderContext context)
@@ -74,8 +71,7 @@ namespace Microsoft.Azure.WebJobs.Host.Bindings
                 BindingProviderContext context)
             {
                 var cm = parent._converterManager;
-                Type typeBuilder = parent._typeBuilder;
-                object[] constructorArgs = parent._constructorArgs;
+                var patternMatcher = parent._patternMatcher;
 
                 var parameter = context.Parameter;
                 TAttribute attributeSource = parameter.GetCustomAttribute<TAttribute>(inherit: false);
@@ -103,12 +99,7 @@ namespace Microsoft.Azure.WebJobs.Host.Bindings
                         return null;
                     }
 
-                    var method = PatternMatcher.FindConverterMethod(typeBuilder, typeof(TAttribute), typeof(TUserType));
-                    if (method == null)
-                    {
-                        return null;
-                    }
-                    buildFromAttribute = PatternMatcher.CreateInstanceAndGetConverterFunc(constructorArgs, method);
+                    buildFromAttribute = patternMatcher.TryGetConverterFunc(typeof(TAttribute), typeof(TUserType));
                 }
                 else
                 {
@@ -120,13 +111,11 @@ namespace Microsoft.Azure.WebJobs.Host.Bindings
                         return null;
                     }
 
-                    var method = PatternMatcher.FindConverterMethod(typeBuilder, typeof(TAttribute), typeof(TType));
-                    if (method == null)
-                    {
-                        return null;
-                    }
-
-                    buildFromAttribute = PatternMatcher.CreateInstanceAndGetConverterFunc(constructorArgs, method);
+                    buildFromAttribute = patternMatcher.TryGetConverterFunc(typeof(TAttribute), typeof(TType));
+                }
+                if (buildFromAttribute == null)
+                {
+                    return null;
                 }
 
                 ParameterDescriptor param;

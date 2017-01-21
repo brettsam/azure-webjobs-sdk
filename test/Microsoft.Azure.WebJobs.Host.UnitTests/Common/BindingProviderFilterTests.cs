@@ -65,10 +65,25 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests.Common
                 var bf = context.Config.BindingFactory;
 
                 // Add [Test] support                
-                var rule = bf.BindToExactType<TestAttribute, string>(attr => attr.Path);
+                var rule = bf.BindToInput<TestAttribute, string>(false, typeof(Converter1));                     
                 var ruleValidate = bf.AddFilter<TestAttribute>(Filter, rule);
-                var rule2 = bf.BindToExactType<TestAttribute, string>(attr => "xxx");
+                var rule2 = bf.BindToInput<TestAttribute, string>(false, typeof(Converter2));
                 context.RegisterBindingRules<TestAttribute>(ruleValidate, rule2);
+            }
+
+            class Converter1
+            {
+                public string Convert(TestAttribute attr)
+                {
+                    return attr.Path;
+                }
+            }
+            class Converter2
+            {
+                public string Convert(TestAttribute attr)
+                {
+                    return "xxx";
+                }
             }
 
             public const string IndexErrorMsg = "error 12345";

@@ -9,8 +9,22 @@ using System.Threading.Tasks;
 namespace Microsoft.Azure.WebJobs.Host.Bindings
 {    
     // Find a Convert() method on a class that matches the type parameters. 
-    internal static class PatternMatcher
+    internal abstract class PatternMatcher
     {
+        public static PatternMatcher New(Type typeBuilder, params object[] constructorArgs)
+        {
+            return new CreateViaType(typeBuilder, constructorArgs);
+        }
+
+        public static PatternMatcher New(object instance)
+        {
+            return new CreateViaInstance(instance);
+        }
+
+        // Attempt to get a matcher for the given types. 
+        // Return null if can't match. 
+        public abstract Func<object, object> TryGetConverterFunc(Type typeSource, Type typeDest);
+
         // Find a Convert* method that is compatible with the given source and destiation types. 
         // Signature will be like:
         //    TIn Convert*(TOut) 
@@ -194,6 +208,53 @@ namespace Microsoft.Azure.WebJobs.Host.Bindings
                     return result;
                 };
                 return converter;
+            }
+        }
+
+        // Wrapper for matching against a static type. 
+        private class CreateViaType : PatternMatcher
+        {
+            private readonly Type _builderType;
+            private readonly object[] _constructorArgs;
+
+            public CreateViaType(Type builderType, object[] constructorArgs)
+            {
+                _builderType = builderType;
+                _constructorArgs = constructorArgs;
+            }
+
+            public override Func<object, object> TryGetConverterFunc(Type typeSource, Type typeDest)
+            {
+                var method = PatternMatcher.FindConverterMethod(_builderType, typeSource, typeDest);
+                if (method == null)
+                {
+                    return null;
+                }
+                var converter = PatternMatcher.CreateInstanceAndGetConverterFunc(_constructorArgs, method);
+                return converter;
+            }
+        }
+
+        // Wrapper for matching against an instance. 
+        private class CreateViaInstance : PatternMatcher
+        {
+            private readonly object _instance;
+
+            public CreateViaInstance(object instance)
+            {
+                _instance = instance;
+            }
+
+            public override Func<object, object> TryGetConverterFunc(Type typeSource, Type typeDest)
+            {
+                var typeConverter = _instance.GetType();
+
+                var method = PatternMatcher.FindConverterMethod(typeConverter, typeSource, typeDest);
+                if (method == null)
+                {
+                    return null;
+                }
+                return PatternMatcher.GetConverterFunc(_instance, method);
             }
         }
     }

@@ -64,9 +64,13 @@ namespace Microsoft.Azure.WebJobs.Host.Queues.Bindings
             var bindingFactory = new BindingFactory(nameResolver, converterManager);
 
             var bindAsyncCollector = bindingFactory.BindToAsyncCollector<QueueAttribute, IStorageQueueMessage>(BuildFromQueueAttribute, ToWriteParameterDescriptorForCollector, CollectAttributeInfo);
-            var bindClient = bindingFactory.BindToExactAsyncType<QueueAttribute, IStorageQueue>(BuildClientFromQueueAttributeAsync, ToReadWriteParameterDescriptorForCollector, CollectAttributeInfo);
-            var bindSdkClient = bindingFactory.BindToExactAsyncType<QueueAttribute, CloudQueue>(BuildRealClientFromQueueAttributeAsync, ToReadWriteParameterDescriptorForCollector, CollectAttributeInfo);
-                        
+
+            var bindClient = bindingFactory.BindToInput<QueueAttribute, IStorageQueue>(false, typeof(QueueBuilder))
+                .SetPostResolveHook<QueueAttribute>(ToReadWriteParameterDescriptorForCollector, CollectAttributeInfo);
+
+            var bindSdkClient = bindingFactory.BindToInput<QueueAttribute, CloudQueue>(false, typeof(QueueBuilder))
+                .SetPostResolveHook<QueueAttribute>(ToReadWriteParameterDescriptorForCollector, CollectAttributeInfo);
+
             var bindingProvider = new GenericCompositeBindingProvider<QueueAttribute>(
                 ValidateQueueAttribute, nameResolver, bindClient, bindSdkClient, bindAsyncCollector);
 
@@ -184,19 +188,6 @@ namespace Microsoft.Azure.WebJobs.Host.Queues.Bindings
             return msg;
         }
 
-        private async Task<CloudQueue> BuildRealClientFromQueueAttributeAsync(QueueAttribute attrResolved)
-        {
-            var queue = await this.BuildClientFromQueueAttributeAsync(attrResolved);
-            return queue.SdkObject;
-        }
-
-        private async Task<IStorageQueue> BuildClientFromQueueAttributeAsync(QueueAttribute attrResolved)
-        {
-            IStorageQueue queue = GetQueue(attrResolved);
-            await queue.CreateIfNotExistsAsync(CancellationToken.None);
-            return queue;
-        }
-
         private IAsyncCollector<IStorageQueueMessage> BuildFromQueueAttribute(QueueAttribute attrResolved)
         {
             IStorageQueue queue = GetQueue(attrResolved);
@@ -208,6 +199,22 @@ namespace Microsoft.Azure.WebJobs.Host.Queues.Bindings
             var attr = (ResolvedQueueAttribute)attrResolved;
             IStorageQueue queue = attr.GetQueue();
             return queue;
+        }
+
+        private class QueueBuilder
+        {
+            public static async Task<IStorageQueue> ConvertBuildClientFromQueueAttributeAsync(QueueAttribute attrResolved)
+            {
+                IStorageQueue queue = GetQueue(attrResolved);
+                await queue.CreateIfNotExistsAsync(CancellationToken.None);
+                return queue;
+            }
+
+            public static async Task<CloudQueue> ConvertBuildRealClientFromQueueAttributeAsync(QueueAttribute attrResolved)
+            {
+                var queue = await ConvertBuildClientFromQueueAttributeAsync(attrResolved);
+                return queue.SdkObject;
+            }
         }
 
         // Queue attributes can optionally be paired with a separate [StorageAccount]. 

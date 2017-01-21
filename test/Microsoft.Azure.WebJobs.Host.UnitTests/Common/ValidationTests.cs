@@ -72,9 +72,14 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests.Common
             {
                 var bf = context.Config.BindingFactory;
 
-                // Add [Test] support
-                var rule = bf.BindToExactType<TestAttribute, Widget>(attr => new Widget());
+                // Add [Test] support                
+                var rule = bf.BindToInput<TestAttribute, Widget>(false, this);
                 context.RegisterBindingRules<TestAttribute>(ValidateAtIndexTime, rule);
+            }
+
+            public Widget Convert(TestAttribute attr)
+            {
+                return new Widget();
             }
 
             private static void ValidateAtIndexTime(TestAttribute attribute, Type parameterType)
@@ -110,11 +115,21 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests.Common
                 var bf = context.Config.BindingFactory;
 
                 // Add [Test] support
-                var rule1 = bf.BindToExactType<TestAttribute, Widget>(attr => new Widget());
-                var rule2 = bf.BindToExactType<TestAttribute, Widget2>(attr => new Widget2());
+                var rule1 = bf.BindToInput<TestAttribute, Widget>(false, this);
+                var rule2 = bf.BindToInput<TestAttribute, Widget2>(false, this);
                 var rule2Validator = bf.AddValidator<TestAttribute>(LocalValidator, rule2);
 
                 context.RegisterBindingRules<TestAttribute>(rule2Validator, rule1);
+            }
+
+            private Widget Convert1(TestAttribute attr)
+            {
+                return new Widget();
+            }
+
+            private Widget2 Convert2(TestAttribute attr)
+            {
+                return new Widget2();
             }
 
             private void LocalValidator(TestAttribute attribute, Type parameterType)

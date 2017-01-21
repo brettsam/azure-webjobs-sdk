@@ -64,7 +64,7 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests
                 var bf = context.Config.BindingFactory;
 
                 // Add [Test] support
-                var rule = bf.BindToExactType<TestAttribute, string>(attr => attr.Path);
+                var rule = bf.BindToInput<TestAttribute, string>(false, typeof(FakeExtClient));
                 extensions.RegisterBindingRules<TestAttribute>(rule);
 
                 // Add [FakeQueueTrigger] support. 
@@ -73,6 +73,11 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests
                 cm.AddConverter<FakeQueueData, string>(msg => msg.Message);
                 var triggerBindingProvider = new FakeQueueTriggerBindingProvider(new FakeQueueClient(), cm);
                 extensions.RegisterExtension<ITriggerBindingProvider>(triggerBindingProvider);
+            }
+
+            private static string Convert(TestAttribute attr)
+            {
+                return attr.Path;
             }
         }
 

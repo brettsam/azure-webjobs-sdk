@@ -58,15 +58,20 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests
             // Binds [FakeQueue] --> IAsyncCollector<FakeQueueData>
             var ruleOutput = bf.BindToAsyncCollector<FakeQueueAttribute, FakeQueueData>(BuildFromAttr);
 
-            // Binds [FakeQueue] --> FakeQueueClient
-            var ruleClient = bf.BindToExactType<FakeQueueAttribute, FakeQueueClient>((attr) => this);
+            // Binds [FakeQueue] --> FakeQueueClient            
+            var ruleClient = bf.BindToInput<FakeQueueAttribute, FakeQueueClient>(false, this);
 
             extensions.RegisterBindingRules<FakeQueueAttribute>(ruleOutput, ruleClient);
 
             var triggerBindingProvider = new FakeQueueTriggerBindingProvider(this, cm);
             extensions.RegisterExtension<ITriggerBindingProvider>(triggerBindingProvider);
         }
-                
+
+        private FakeQueueClient Convert(FakeQueueAttribute attr)
+        {
+            return this;
+        }
+
 
         private IAsyncCollector<FakeQueueData> BuildFromAttr(FakeQueueAttribute attr)
         {

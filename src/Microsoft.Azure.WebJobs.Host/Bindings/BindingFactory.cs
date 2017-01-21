@@ -145,109 +145,39 @@ namespace Microsoft.Azure.WebJobs.Host.Bindings
         /// <param name="allowConversions">
         /// If false, then the user parameter type must exactly match TType. 
         /// If true, this rule can use the ConverterManager to convert from TType to the final parameter type </param>
-        /// <param name="typeBuilder">A class with builder methods on it. This will get instantiated to perform the builder rule.</param>
+        /// <param name="builderType">A class with builder methods on it. This will get instantiated to perform the builder rule.</param>
         /// <param name="constructorArgs">constructor arguments to pass to the typeBuilder instantiation. This can be used 
         /// to flow state (like configuration, secrets, etc) from the configuration to the specific binding</param>
         /// <returns>A binding rule.</returns>
         public IBindingProvider BindToInput<TAttribute, TType>(
             bool allowConversions,
-            Type typeBuilder,
+            Type builderType,
             params object[] constructorArgs)
                 where TAttribute : Attribute
         {
             var cm = allowConversions ? this._converterManager : null;
-            return new BindToInputBindingProvider<TAttribute, TType>(this._nameResolver, cm, typeBuilder, constructorArgs);
+            var pm = PatternMatcher.New(builderType, constructorArgs);
+            return new BindToInputBindingProvider<TAttribute, TType>(this._nameResolver, cm, pm);
         }
 
-        #if false  // $$$$
         /// <summary>
-        /// 
+        /// General rule for binding to an input type for a given attribute. 
         /// </summary>
-        /// <typeparam name="TAttribute"></typeparam>
-        /// <typeparam name="TType"></typeparam>
-        /// <param name="allowConversions"></param>
-        /// <param name="builderInstance"></param>
-        /// <returns></returns>
+        /// <typeparam name="TAttribute">type of binding attribute on the user's parameter.</typeparam>
+        /// <typeparam name="TType">The user type must be compatible with this type for the binding to apply.</typeparam>
+        /// <param name="allowConversions">
+        /// If false, then the user parameter type must exactly match TType. 
+        /// If true, this rule can use the ConverterManager to convert from TType to the final parameter type </param>
+        /// <param name="builderInstance">Instance with converter methods on it.</param>
+        /// <returns>A binding rule.</returns>
         public IBindingProvider BindToInput<TAttribute, TType>(
             bool allowConversions,
             object builderInstance)
-        {
-
-        }
-#endif
-
-        /// <summary>
-        /// Create a binding provider that binds to the user parameter type. This skips the converter manager. 
-        /// </summary>
-        /// <param name="builder">Builder function that takes (resolved attribute, user parameter type) and returns an object that is assigned to the user parameter type.</param>
-        /// <returns>A binding provider that applies these semantics.</returns>
-        [Obsolete("Use OpenType conversion instead")]
-        public IBindingProvider BindToGenericItem<TAttribute>(Func<TAttribute, Type, Task<object>> builder)
             where TAttribute : Attribute
         {
-            return new GenericItemBindingProvider<TAttribute>(builder, this._nameResolver);
-        }
-
-        /// <summary>
-        /// Create a binding provider that binds the parameter to an specific instance of TUserType. 
-        /// </summary>
-        /// <typeparam name="TAttribute">type of binding attribute on the user's parameter.</typeparam>
-        /// <typeparam name="TUserType">The exact type of the user's parameter that this will bind to.</typeparam>
-        /// <param name="buildFromAttribute">builder function to create the object that will get passed to the user function.</param>
-        /// <returns>A binding provider that applies these semantics.</returns>
-        public IBindingProvider BindToExactType<TAttribute, TUserType>(Func<TAttribute, TUserType> buildFromAttribute)
-            where TAttribute : Attribute
-        {
-            return this.BindToExactAsyncType<TAttribute, TUserType>((attr) => Task.FromResult(buildFromAttribute(attr)));
-        }
-
-        /// <summary>
-        /// Create a binding provider that binds the parameter to an specific instance of TUserType. 
-        /// </summary>
-        /// <typeparam name="TAttribute">type of binding attribute on the user's parameter.</typeparam>
-        /// <typeparam name="TUserType">The exact type of the user's parameter that this will bind to.</typeparam>
-        /// <param name="buildFromAttribute">builder function to create the object that will get passed to the user function.</param>
-        /// <param name="buildParameterDescriptor">An optional function to create a specific ParameterDescriptor object for the dashboard. If missing, a default ParameterDescriptor is created. </param>
-        /// <param name="postResolveHook">an advanced hook for translating the attribute. </param>
-        /// <returns>A binding provider that applies these semantics.</returns>
-        public IBindingProvider BindToExactAsyncType<TAttribute, TUserType>(
-            Func<TAttribute, Task<TUserType>> buildFromAttribute,
-            Func<TAttribute, ParameterInfo, INameResolver, ParameterDescriptor> buildParameterDescriptor = null,
-            Func<TAttribute, ParameterInfo, INameResolver, Task<TAttribute>> postResolveHook = null)
-            where TAttribute : Attribute
-        {
-            var bindingProvider = new ExactTypeBindingProvider<TAttribute, TUserType>(
-                _nameResolver, 
-                buildFromAttribute,
-                null,
-                buildParameterDescriptor, 
-                postResolveHook);
-            return bindingProvider;
-        }
-
-        /// <summary>
-        /// Create a binding provider that binds the parameter to a set of possible types via converter manager. 
-        /// </summary>
-        /// <typeparam name="TAttribute">type of binding attribute on the user's parameter.</typeparam>
-        /// <typeparam name="TMiddleType">An intermediate type to bind to. 
-        /// Converter Manager will then convert this intermediate type to the user's exact type in their signature.</typeparam>
-        /// <param name="buildFromAttribute">builder function to create the object that will get passed to the user function.</param>
-        /// <param name="buildParameterDescriptor">An optional function to create a specific ParameterDescriptor object for the dashboard. If missing, a default ParameterDescriptor is created. </param>
-        /// <param name="postResolveHook">an advanced hook for translating the attribute. </param>
-        /// <returns>A binding provider that applies these semantics.</returns>
-        public IBindingProvider BindToGeneralAsyncType<TAttribute, TMiddleType>(
-            Func<TAttribute, Task<TMiddleType>> buildFromAttribute,
-            Func<TAttribute, ParameterInfo, INameResolver, ParameterDescriptor> buildParameterDescriptor = null,
-            Func<TAttribute, ParameterInfo, INameResolver, Task<TAttribute>> postResolveHook = null)
-            where TAttribute : Attribute
-        {
-            var bindingProvider = new ExactTypeBindingProvider<TAttribute, TMiddleType>(
-                _nameResolver, 
-                buildFromAttribute, 
-                _converterManager, 
-                buildParameterDescriptor, 
-                postResolveHook);
-            return bindingProvider;
+            var cm = allowConversions ? this._converterManager : null;
+            var pm = PatternMatcher.New(builderInstance);
+            return new BindToInputBindingProvider<TAttribute, TType>(this._nameResolver, cm, pm);
         }
 
         /// <summary>
