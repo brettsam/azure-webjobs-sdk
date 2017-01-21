@@ -18,7 +18,7 @@ namespace Microsoft.Azure.WebJobs.Host.Bindings
         // for the correct convert function and on the properly resolved generic type. 
         public static MethodInfo FindConverterMethod(Type typeConverter, Type typeSource, Type typeDest)
         {
-            var allMethods = typeConverter.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            var allMethods = typeConverter.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static);
             foreach (var method in allMethods)
             {
                 if (!method.Name.StartsWith("Convert", StringComparison.OrdinalIgnoreCase))
@@ -71,15 +71,18 @@ namespace Microsoft.Azure.WebJobs.Host.Bindings
             // typeConverter may have open generic types.  method has now resolved those types. 
             var declaringType = method.DeclaringType;
 
-            object converterInstance;
-            try
+            object converterInstance = null;
+            if (!method.IsStatic)
             {
-                // common for constructor to throw validation errors.          
-                converterInstance = Activator.CreateInstance(declaringType, constructorArgs);
-            }
-            catch (TargetInvocationException e)
-            {
-                throw e.InnerException;
+                try
+                {
+                    // common for constructor to throw validation errors.          
+                    converterInstance = Activator.CreateInstance(declaringType, constructorArgs);
+                }
+                catch (TargetInvocationException e)
+                {
+                    throw e.InnerException;
+                }
             }
 
             return PatternMatcher.GetConverterFunc(converterInstance, method);

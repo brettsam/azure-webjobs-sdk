@@ -27,12 +27,12 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests.Common
         // Test with concrete types, no converters.
         // Attr-->Widget 
         [Fact]
-        public void Test1()
+        public void TestConcreteTypeNoConverter()
         {
-            TestWorker<FakeExtClient>();
+            TestWorker<ConfigConcreteTypeNoConverter>();
         }
         
-        public class FakeExtClient : IExtensionConfigProvider, ITest<FakeExtClient>
+        public class ConfigConcreteTypeNoConverter : IExtensionConfigProvider, ITest<ConfigConcreteTypeNoConverter>
         {
             public void Initialize(ExtensionConfigContext context)
             {
@@ -41,28 +41,29 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests.Common
                 context.RegisterBindingRules<TestAttribute>(rule);
             }
 
-            string _value;
+            public void Test(TestJobHost<ConfigConcreteTypeNoConverter> host)
+            {
+                host.Call("Func", new { k = 1 });
+                Assert.Equal("AlphaBuilder(1)", _log);
+            }
+
+            string _log;
 
             // Input Rule (exact match): --> Widget 
             public void Func([Test("{k}")] AlphaType w)
             {
-                _value = w._value;
-            }
-
-            public void Test(TestJobHost<FakeExtClient> host)
-            {
-                host.Call("Func", new { k = 1 });
-                Assert.Equal("AlphaBuilder(1)", _value);
-            }
+                _log = w._value;
+            }         
         }
 
+        // Use OpenType (a general builder), still no converters. 
         [Fact]
-        public void Test2()
+        public void TestOpenTypeNoConverters()
         {
-            TestWorker<FakeExtClient2>();
+            TestWorker<ConfigOpenTypeNoConverters>();
         }
    
-        public class FakeExtClient2 : IExtensionConfigProvider, ITest<FakeExtClient2>
+        public class ConfigOpenTypeNoConverters : IExtensionConfigProvider, ITest<ConfigOpenTypeNoConverters>
         {
             public void Initialize(ExtensionConfigContext context)
             {
@@ -74,37 +75,37 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests.Common
                 context.RegisterBindingRules<TestAttribute>(rule);
             }
             
-            public void Test(TestJobHost<FakeExtClient2> host)
+            public void Test(TestJobHost<ConfigOpenTypeNoConverters> host)
             {
                 host.Call("Func1", new { k = 1 });
-                Assert.Equal("GeneralBuilder_AlphaType(1)", _value); 
+                Assert.Equal("GeneralBuilder_AlphaType(1)", _log); 
 
                 host.Call("Func2", new { k = 2 });
-                Assert.Equal("GeneralBuilder_BetaType(2)", _value);
+                Assert.Equal("GeneralBuilder_BetaType(2)", _log);
             }
 
-            string _value;
+            string _log;
 
             // Input Rule (generic match): --> Widget
             public void Func1([Test("{k}")] AlphaType w)
             {
-                _value = w._value;
+                _log = w._value;
             }
 
             // Input Rule (generic match): --> OtherType
             public void Func2([Test("{k}")] BetaType w)
             {
-                _value = w._value;
+                _log = w._value;
             }
         }
 
         [Fact]
-        public void Test3()
+        public void TestWithConverters()
         {
-            TestWorker<FakeExtClient3>();
+            TestWorker<ConfigWithConverters>();
         }
 
-        public class FakeExtClient3 : IExtensionConfigProvider, ITest<FakeExtClient3>
+        public class ConfigWithConverters : IExtensionConfigProvider, ITest<ConfigWithConverters>
         {
             public void Initialize(ExtensionConfigContext context)
             {
@@ -112,37 +113,116 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests.Common
 
                 bf.ConverterManager.AddConverter<AlphaType, BetaType>(ConvertAlpha2Beta);
                 
-                // $$$ If it's OpenType, then we'd short-circuit the converter manager . 
+                // The AlphaType restriction here means that although we have a GeneralBuilder<> that *could*
+                // directly build a BetaType, we can only use it to build AlphaTypes, and so we must invoke the converter.
                 var rule = bf.BindToInput<TestAttribute, AlphaType>(true, typeof(GeneralBuilder<>));
                                 
                 context.RegisterBindingRules<TestAttribute>(rule);
             }
 
-            public void Test(TestJobHost<FakeExtClient3> host)
+            public void Test(TestJobHost<ConfigWithConverters> host)
             {
                 host.Call("Func1", new { k = 1 });
-                Assert.Equal("GeneralBuilder_AlphaType(1)", _value);
+                Assert.Equal("GeneralBuilder_AlphaType(1)", _log);
 
                 host.Call("Func2", new { k = 2 });
-                Assert.Equal("A2B(GeneralBuilder_AlphaType(2))", _value);                
+                Assert.Equal("A2B(GeneralBuilder_AlphaType(2))", _log);                
             }
 
-            string _value;
+            string _log;
 
             // Input Rule (exact match):  --> Widget
             public void Func1([Test("{k}")] AlphaType w)
             {
-                _value = w._value;
+                _log = w._value;
             }
 
             // Input Rule (match w/ converter) : --> Widget
             // Converter: Widget --> OtherType
             public void Func2([Test("{k}")] BetaType w)
             {
-                _value = w._value;
+                _log = w._value;
             }
         }
-    
+
+        // Test ordering. First rule wins. 
+        [Fact]
+        public void TestMultipleRules()
+        {
+            TestWorker<ConfigConcreteTypeNoConverter>();
+        }
+
+        public class ConfigMultipleRules : IExtensionConfigProvider, ITest<ConfigMultipleRules>
+        {
+            public void Initialize(ExtensionConfigContext context)
+            {
+                var bf = context.Config.BindingFactory;
+                var rule1 = bf.BindToInput<TestAttribute, AlphaType>(false, typeof(AlphaBuilder));
+                var rule2 = bf.BindToInput<TestAttribute, BetaType>(false, typeof(BetaBuilder));
+                context.RegisterBindingRules<TestAttribute>(rule1, rule2);
+            }
+
+            public void Test(TestJobHost<ConfigMultipleRules> host)
+            {
+                host.Call("Func", new { k = 1 });
+                Assert.Equal("AlphaBuilder(1)", _log);
+
+                host.Call("Func2", new { k = 1 });
+                Assert.Equal("BetaBuilder(1)", _log);
+            }
+
+            string _log;
+                        
+            public void Func([Test("{k}")] AlphaType w)
+            {
+                _log = w._value;
+            }
+
+            // Input Rule (exact match): --> Widget 
+            public void Func2([Test("{k}")] BetaType w)
+            {
+                _log = w._value;
+            }
+        }
+
+        // Error case. 
+        [Fact]
+        public void TestError1()
+        {
+            TestWorker<ConfigError1>();
+        }
+
+        public class ConfigError1 : IExtensionConfigProvider, ITest<ConfigError1>
+        {
+            public void Initialize(ExtensionConfigContext context)
+            {
+                var bf = context.Config.BindingFactory;
+                
+                var rule = bf.BindToInput<TestAttribute, OpenType>(true, typeof(AlphaBuilder));
+
+                context.RegisterBindingRules<TestAttribute>(rule);
+            }
+
+            public void Test(TestJobHost<ConfigError1> host)
+            {
+                host.AssertIndexingError("Func", ErrorMessage(typeof(BetaType)));
+            }
+      
+            // Fail to bind because: 
+            // We only have an AlphaBuilder, and no registered converters from Alpha-->Beta
+            public void Func([Test("{k}")] BetaType w)
+            {
+                Assert.False(true); // Method shouldn't have been invoked. 
+            }
+        }
+
+        // Get standard error message for failing to bind an attribute to a given parameter type.
+        static string ErrorMessage(Type parameterType)
+        {
+            return $"Can't bind Test to type '{parameterType.FullName}'.";
+        }
+     
+        // Glue to initialize a JobHost with the correct config and invoke the Test method. 
         // Config also has the program on it.         
         private void TestWorker<TConfig>() where TConfig : IExtensionConfigProvider, ITest<TConfig>, new() 
         {
@@ -157,26 +237,6 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests.Common
             test.Test(host);
         }
                 
-        // Unit test that we can properly extract TMessage from a parameter type. 
-        [Fact]
-        public void GetCoreType()
-        {
-            Assert.Equal(null, BindingFactoryHelpers.GetAsyncCollectorCoreType(typeof(AlphaType))); // Not an AsyncCollector type
-
-            Assert.Equal(typeof(AlphaType), BindingFactoryHelpers.GetAsyncCollectorCoreType(typeof(IAsyncCollector<AlphaType>)));
-            Assert.Equal(typeof(AlphaType), BindingFactoryHelpers.GetAsyncCollectorCoreType(typeof(ICollector<AlphaType>)));
-            Assert.Equal(typeof(AlphaType), BindingFactoryHelpers.GetAsyncCollectorCoreType(typeof(AlphaType).MakeByRefType()));
-            Assert.Equal(typeof(AlphaType), BindingFactoryHelpers.GetAsyncCollectorCoreType(typeof(AlphaType[]).MakeByRefType()));
-
-            // Verify that 'out' takes precedence over generic. 
-            Assert.Equal(typeof(IFoo<AlphaType>), BindingFactoryHelpers.GetAsyncCollectorCoreType(typeof(IFoo<AlphaType>).MakeByRefType()));
-        }
-
-        // Random generic type to use in tests. 
-        interface IFoo<T>
-        {
-        }
-
         // Some custom type to bind to. 
         public class AlphaType
         {
@@ -204,7 +264,6 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests.Common
             return BetaType.New($"A2B({x._value})");
         }
 
-
         // A test attribute for binding.  
         public class TestAttribute : Attribute
         {
@@ -223,6 +282,15 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests.Common
             private AlphaType Convert(TestAttribute attr)
             {
                 return AlphaType.New("AlphaBuilder(" + attr.Path + ")");
+            }
+        }
+
+        // Converter for building instances of RedType from an attribute
+        class BetaBuilder
+        {
+            private AlphaType Convert(TestAttribute attr)
+            {
+                return AlphaType.New("BetaBuilder(" + attr.Path + ")");
             }
         }
 

@@ -5,9 +5,13 @@ using System;
 using System.Reflection;
 using System.Threading.Tasks;
 using Microsoft.Azure.WebJobs.Host.Protocols;
+
 namespace Microsoft.Azure.WebJobs.Host.Bindings
 {
-    internal class ClassX<TAttribute, TType> : IBindingProvider
+    // General rule for binding to input parameters.
+    // Can invoke Converter manager. 
+    // Can leverage OpenTypes for pattern matchers.
+    internal class BindToInputBindingProvider<TAttribute, TType> : FluidBindingProvider<TAttribute>, IBindingProvider
         where TAttribute : Attribute
     {
         private readonly INameResolver _nameResolver;
@@ -15,7 +19,7 @@ namespace Microsoft.Azure.WebJobs.Host.Bindings
         private readonly Type _typeBuilder;
         private readonly object[] _constructorArgs;
 
-        public ClassX(
+        public BindToInputBindingProvider(
             INameResolver nameResolver,
             IConverterManager converterManager,
             Type typeBuilder,
@@ -66,7 +70,7 @@ namespace Microsoft.Azure.WebJobs.Host.Bindings
             }
 
             public static ExactBinding<TUserType> TryBuild(
-                ClassX<TAttribute, TType> parent,
+                BindToInputBindingProvider<TAttribute, TType> parent,
                 BindingProviderContext context)
             {
                 var cm = parent._converterManager;
@@ -76,7 +80,13 @@ namespace Microsoft.Azure.WebJobs.Host.Bindings
                 var parameter = context.Parameter;
                 TAttribute attributeSource = parameter.GetCustomAttribute<TAttribute>(inherit: false);
 
-                var cloner = new AttributeCloner<TAttribute>(attributeSource, context.BindingDataContract, parent._nameResolver);
+                Func<TAttribute, Task<TAttribute>> hookWrapper = null;
+                if (parent.PostResolveHook != null)
+                {
+                    hookWrapper = (attrResolved) => parent.PostResolveHook(attrResolved, parameter, parent._nameResolver);
+                }
+
+                var cloner = new AttributeCloner<TAttribute>(attributeSource, context.BindingDataContract, parent._nameResolver, hookWrapper);
 
                 Func<object, object> buildFromAttribute;
                 FuncConverter<TType, TAttribute, TUserType> converter = null;
@@ -119,14 +129,22 @@ namespace Microsoft.Azure.WebJobs.Host.Bindings
                     buildFromAttribute = PatternMatcher.CreateInstanceAndGetConverterFunc(constructorArgs, method);
                 }
 
-                var param = new ParameterDescriptor
+                ParameterDescriptor param;
+                if (parent.BuildParameterDescriptor != null)
                 {
-                    Name = parameter.Name,
-                    DisplayHints = new ParameterDisplayHints
+                    param = parent.BuildParameterDescriptor(attributeSource, parameter, parent._nameResolver);
+                }
+                else
+                {
+                    param = new ParameterDescriptor
                     {
-                        Description = "input"
-                    }
-                };
+                        Name = parameter.Name,
+                        DisplayHints = new ParameterDisplayHints
+                        {
+                            Description = "input"
+                        }
+                    };
+                }
 
                 return new ExactBinding<TUserType>(cloner, param, buildFromAttribute, converter);
             }

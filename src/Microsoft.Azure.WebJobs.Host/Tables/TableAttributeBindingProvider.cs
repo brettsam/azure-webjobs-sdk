@@ -75,31 +75,23 @@ namespace Microsoft.Azure.WebJobs.Host.Tables
             
             var bindingFactory = new BindingFactory(nameResolver, converterManager);
 
-            var bindToExactCloudTable = bindingFactory.BindToGeneralAsyncType<TableAttribute, CloudTable>(
-                original.BindToCloudTable,
-                original.ToParameterDescriptorForCollector,
-                original.CollectAttributeInfo);
-
             // Includes converter manager, which provides access to IQueryable<ITableEntity>
-            var bindToExactTestCloudTable = bindingFactory.BindToGeneralAsyncType<TableAttribute, IStorageTable>(
-                original.BindToTestCloudTable,
-                original.ToParameterDescriptorForCollector,
-                original.CollectAttributeInfo);
+            var bindToExactCloudTable = bindingFactory.BindToInput<TableAttribute, CloudTable>(true, typeof(JObjectBuilder))
+                .SetPostResolveHook<TableAttribute>(original.ToParameterDescriptorForCollector, original.CollectAttributeInfo);
+
+            var bindToExactTestCloudTable = bindingFactory.BindToInput<TableAttribute, IStorageTable>(true, typeof(JObjectBuilder))
+                .SetPostResolveHook<TableAttribute>(original.ToParameterDescriptorForCollector, original.CollectAttributeInfo);
 
             var bindAsyncCollector = bindingFactory.BindToAsyncCollector<TableAttribute, ITableEntity>(
                 original.BuildFromTableAttribute,
                 null,
                 original.CollectAttributeInfo);
 
-            var bindToJobject = bindingFactory.BindToExactAsyncType<TableAttribute, JObject>(
-                original.BuildJObject,
-                null,
-                original.CollectAttributeInfo);
+            var bindToJobject = bindingFactory.BindToInput<TableAttribute, JObject>(false, typeof(JObjectBuilder))
+                .SetPostResolveHook<TableAttribute>(null, original.CollectAttributeInfo);
 
-            var bindToJArray = bindingFactory.BindToExactAsyncType<TableAttribute, JArray>(
-                original.BuildJArray,
-                null,
-                original.CollectAttributeInfo);
+            var bindToJArray = bindingFactory.BindToInput<TableAttribute, JArray>(false, typeof(JObjectBuilder))
+                .SetPostResolveHook<TableAttribute>(null, original.CollectAttributeInfo);
 
             var bindingProvider = new GenericCompositeBindingProvider<TableAttribute>(
                 ValidateAttribute, nameResolver,
@@ -138,21 +130,6 @@ namespace Microsoft.Azure.WebJobs.Host.Tables
             };
         }
 
-        private Task<IStorageTable> BindToTestCloudTable(TableAttribute attribute)
-        {
-            IStorageTable table = GetTable(attribute);
-            return Task.FromResult(table);
-        }
-
-        private async Task<CloudTable> BindToCloudTable(TableAttribute attribute)
-        {
-            IStorageTable table = GetTable(attribute);
-            await table.CreateIfNotExistsAsync(CancellationToken.None);
-
-            var sdkTable = table.SdkObject;
-            return sdkTable;
-        }
-
         private static void ValidateAttribute(TableAttribute attribute, Type parameterType)
         {
             // Queue pre-existing  behavior: if there are { }in the path, then defer validation until runtime. 
@@ -160,82 +137,6 @@ namespace Microsoft.Azure.WebJobs.Host.Tables
             {
                 TableClient.ValidateAzureTableName(attribute.TableName);
             }
-        }
-
-        private async Task<JObject> BuildJObject(TableAttribute attribute)
-        {
-            IStorageTable table = GetTable(attribute);
-
-            IStorageTableOperation retrieve = table.CreateRetrieveOperation<DynamicTableEntity>(
-              attribute.PartitionKey, attribute.RowKey);
-            TableResult result = await table.ExecuteAsync(retrieve, CancellationToken.None);
-            DynamicTableEntity entity = (DynamicTableEntity)result.Result;
-            if (entity == null)
-            {
-                return null;
-            }
-            else
-            {
-                var obj = ConvertEntityToJObject(entity);
-                return obj;
-            }
-        }
-
-        // Build a JArray.
-        // Used as an alternative to binding to IQueryable.
-        private async Task<JArray> BuildJArray(TableAttribute attribute)
-        {
-            var table = GetTable(attribute).SdkObject;
-
-            string finalQuery = attribute.Filter;
-            if (!string.IsNullOrEmpty(attribute.PartitionKey))
-            {
-                var partitionKeyPredicate = TableQuery.GenerateFilterCondition("PartitionKey", QueryComparisons.Equal, attribute.PartitionKey);
-                if (!string.IsNullOrEmpty(attribute.Filter))
-                {
-                    finalQuery = TableQuery.CombineFilters(attribute.Filter, TableOperators.And, partitionKeyPredicate);
-                }
-                else
-                {
-                    finalQuery = partitionKeyPredicate;
-                }
-            }
-
-            TableQuery tableQuery = new TableQuery
-            {
-                FilterString = finalQuery
-            };
-            if (attribute.Take > 0)
-            {
-                tableQuery.TakeCount = attribute.Take;
-            }
-            int countRemaining = attribute.Take;
-
-            JArray entityArray = new JArray();
-            TableContinuationToken token = null;
-
-            do
-            {
-                var segment = await table.ExecuteQuerySegmentedAsync(tableQuery, token);
-                var entities = segment.Results;
-
-                token = segment.ContinuationToken;
-
-                foreach (var entity in entities)
-                {
-                    countRemaining--;
-                    entityArray.Add(ConvertEntityToJObject(entity));
-
-                    if (countRemaining == 0)
-                    {
-                        token = null;
-                        break;
-                    }
-                }                
-            }
-            while (token != null);                      
-
-            return entityArray;
         }
 
         private IAsyncCollector<ITableEntity> BuildFromTableAttribute(TableAttribute attribute)
@@ -478,6 +379,101 @@ namespace Microsoft.Azure.WebJobs.Host.Tables
             public ITableEntity Convert(TElement item)
             {
                 return Converter.Convert(item);
+            }
+        }
+
+        // Provide some common builder rules. 
+        private class JObjectBuilder
+        {
+            public static Task<IStorageTable> ConvertBindToTestCloudTable(TableAttribute attribute)
+            {
+                IStorageTable table = GetTable(attribute);
+                return Task.FromResult(table);
+            }
+
+            public static async Task<CloudTable> ConvertBindToCloudTable(TableAttribute attribute)
+            {
+                IStorageTable table = GetTable(attribute);
+                await table.CreateIfNotExistsAsync(CancellationToken.None);
+
+                var sdkTable = table.SdkObject;
+                return sdkTable;
+            }
+
+            public async Task<JObject> ConvertToObject(TableAttribute attribute)
+            {
+                IStorageTable table = GetTable(attribute);
+
+                IStorageTableOperation retrieve = table.CreateRetrieveOperation<DynamicTableEntity>(
+                  attribute.PartitionKey, attribute.RowKey);
+                TableResult result = await table.ExecuteAsync(retrieve, CancellationToken.None);
+                DynamicTableEntity entity = (DynamicTableEntity)result.Result;
+                if (entity == null)
+                {
+                    return null;
+                }
+                else
+                {
+                    var obj = ConvertEntityToJObject(entity);
+                    return obj;
+                }
+            }
+
+            // Build a JArray.
+            // Used as an alternative to binding to IQueryable.
+            public async Task<JArray> ConvertToArray(TableAttribute attribute)
+            {
+                var table = GetTable(attribute).SdkObject;
+
+                string finalQuery = attribute.Filter;
+                if (!string.IsNullOrEmpty(attribute.PartitionKey))
+                {
+                    var partitionKeyPredicate = TableQuery.GenerateFilterCondition("PartitionKey", QueryComparisons.Equal, attribute.PartitionKey);
+                    if (!string.IsNullOrEmpty(attribute.Filter))
+                    {
+                        finalQuery = TableQuery.CombineFilters(attribute.Filter, TableOperators.And, partitionKeyPredicate);
+                    }
+                    else
+                    {
+                        finalQuery = partitionKeyPredicate;
+                    }
+                }
+
+                TableQuery tableQuery = new TableQuery
+                {
+                    FilterString = finalQuery
+                };
+                if (attribute.Take > 0)
+                {
+                    tableQuery.TakeCount = attribute.Take;
+                }
+                int countRemaining = attribute.Take;
+
+                JArray entityArray = new JArray();
+                TableContinuationToken token = null;
+
+                do
+                {
+                    var segment = await table.ExecuteQuerySegmentedAsync(tableQuery, token);
+                    var entities = segment.Results;
+
+                    token = segment.ContinuationToken;
+
+                    foreach (var entity in entities)
+                    {
+                        countRemaining--;
+                        entityArray.Add(ConvertEntityToJObject(entity));
+
+                        if (countRemaining == 0)
+                        {
+                            token = null;
+                            break;
+                        }
+                    }
+                }
+                while (token != null);
+
+                return entityArray;
             }
         }
     }

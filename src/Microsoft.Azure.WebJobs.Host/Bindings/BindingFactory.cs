@@ -138,14 +138,17 @@ namespace Microsoft.Azure.WebJobs.Host.Bindings
         }
 
         /// <summary>
-        /// $$$ 
+        /// General rule for binding to an input type for a given attribute. 
         /// </summary>
-        /// <typeparam name="TAttribute"></typeparam>
-        /// <typeparam name="TType"></typeparam>
-        /// <param name="allowConversions"></param>
-        /// <param name="typeBuilder"></param>
-        /// <param name="constructorArgs"></param>
-        /// <returns></returns>
+        /// <typeparam name="TAttribute">type of binding attribute on the user's parameter.</typeparam>
+        /// <typeparam name="TType">The user type must be compatible with this type for the binding to apply.</typeparam>
+        /// <param name="allowConversions">
+        /// If false, then the user parameter type must exactly match TType. 
+        /// If true, this rule can use the ConverterManager to convert from TType to the final parameter type </param>
+        /// <param name="typeBuilder">A class with builder methods on it. This will get instantiated to perform the builder rule.</param>
+        /// <param name="constructorArgs">constructor arguments to pass to the typeBuilder instantiation. This can be used 
+        /// to flow state (like configuration, secrets, etc) from the configuration to the specific binding</param>
+        /// <returns>A binding rule.</returns>
         public IBindingProvider BindToInput<TAttribute, TType>(
             bool allowConversions,
             Type typeBuilder,
@@ -153,7 +156,7 @@ namespace Microsoft.Azure.WebJobs.Host.Bindings
                 where TAttribute : Attribute
         {
             var cm = allowConversions ? this._converterManager : null;
-            return new ClassX<TAttribute, TType>(this._nameResolver, cm, typeBuilder, constructorArgs);
+            return new BindToInputBindingProvider<TAttribute, TType>(this._nameResolver, cm, typeBuilder, constructorArgs);
         }
 
         #if false  // $$$$
