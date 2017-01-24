@@ -162,16 +162,16 @@ namespace Microsoft.Azure.WebJobs
             object obj;
 
             // First lookup specificially for TAttribute. 
-            string key1 = GetKey<TSrc, TDest, TAttribute>();
-            if (_funcsWithAttr.TryGetValue(key1, out obj))
+            string keySpecific = GetKey<TSrc, TDest, TAttribute>();
+            if (_funcsWithAttr.TryGetValue(keySpecific, out obj))
             {               
                 var func = (FuncConverter<TSrc, TAttribute, TDest>)obj;
                 return func;
             }
 
             // No specific case, lookup in the general purpose case. 
-            string key2 = GetKey<TSrc, TDest, Attribute>();
-            if (_funcsWithAttr.TryGetValue(key2, out obj))
+            string keyGeneral = GetKey<TSrc, TDest, Attribute>();
+            if (_funcsWithAttr.TryGetValue(keyGeneral, out obj))
             {
                 var func1 = (FuncConverter<TSrc, Attribute, TDest>)obj;
                 FuncConverter<TSrc, TAttribute, TDest> func2 = (src, attr, context) => func1(src, null, context);

@@ -202,9 +202,9 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests
 
 
         // Test converter using Open generic types
-        class TypeConverter2<TInput, TOutput>
+        class TypeConverterWithTwoGenericArgs<TInput, TOutput>
         {
-            public TypeConverter2(ConverterManagerTests config)
+            public TypeConverterWithTwoGenericArgs(ConverterManagerTests config)
             { 
                 // We know this is only used by a single test invoking with this combination of params.
                 Assert.Equal(typeof(String), typeof(TInput));
@@ -221,7 +221,7 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests
         }
 
         [Fact]
-        public void OpenType2()
+        public void OpenTypeConverterWithTwoGenericArgs()
         {
             Assert.Equal(0, _counter);
             var cm = new ConverterManager();
@@ -229,7 +229,7 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests
             // Register a converter builder. 
             // Builder runs once; converter runs each time.
             // Uses open type to match. 
-            cm.AddConverterBuilder<TypeWrapperIsString, int, Attribute>(typeof(TypeConverter2<,>), this);
+            cm.AddConverterBuilder<TypeWrapperIsString, int, Attribute>(typeof(TypeConverterWithTwoGenericArgs<,>), this);
 
             var converter = cm.GetConverter<string, int, Attribute>();
 
@@ -244,7 +244,7 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests
 
 
         // Test converter using Open generic types, rearranging generics
-        class TypeConverter5<TElement>
+        class TypeConverterWithOneGenericArg<TElement>
         {
             public IEnumerable<TElement> Convert(TElement input)
             {
@@ -254,7 +254,7 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests
         }
 
         [Fact]
-        public void OpenType5()
+        public void OpenTypeConverterWithOneGenericArg()
         {
             var cm = new ConverterManager();
 
@@ -262,7 +262,7 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests
             // Builder runs once; converter runs each time.
             // Uses open type to match. 
             // Also test the IEnumerable<OpenType> pattern. 
-            cm.AddConverterBuilder<OpenType, IEnumerable<OpenType>, Attribute>(typeof(TypeConverter5<>));
+            cm.AddConverterBuilder<OpenType, IEnumerable<OpenType>, Attribute>(typeof(TypeConverterWithOneGenericArg<>));
 
             var attr = new TestAttribute(null);
 
@@ -277,32 +277,18 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests
             }
         }
 
-        // Test converter using concrete types. 
-        class TypeConverter3
-        {
-            public TypeConverter3(ConverterManagerTests config)
-            {
-                config._counter++;
-            }      
-
-            public int Convert(string input)
-            {
-                return int.Parse(input);
-            }
-        }
-
         // Counter used by tests to verify that converter ctors are only run once and then shared across 
         // multiple invocations. 
         private int _counter;
 
         // Converter discovered for OpenType4 test. Used directly. 
-        public int ConvertForOpenType4Test(string input)
+        public int ConvertInstanceMethod(string input)
         {
             return int.Parse(input);
         }
 
         [Fact]
-        public void OpenType4()
+        public void OpenTypeSimpleConcreteConverter()
         {
             Assert.Equal(0, _counter);
             var cm = new ConverterManager();
@@ -324,8 +310,22 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests
         }
 
 
+        // Test converter using concrete types. 
+        class TypeConverterWithConcreteTypes
+        {
+            public TypeConverterWithConcreteTypes(ConverterManagerTests config)
+            {
+                config._counter++;
+            }
+
+            public int Convert(string input)
+            {
+                return int.Parse(input);
+            }
+        }
+
         [Fact]
-        public void OpenType3()
+        public void OpenTypeConverterWithConcreteTypes()
         {
             Assert.Equal(0, _counter);
             var cm = new ConverterManager();
@@ -333,7 +333,7 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests
             // Register a converter builder. 
             // Builder runs once; converter runs each time.
             // Uses open type to match. 
-            cm.AddConverterBuilder<TypeWrapperIsString, int, Attribute>(typeof(TypeConverter3), this);
+            cm.AddConverterBuilder<TypeWrapperIsString, int, Attribute>(typeof(TypeConverterWithConcreteTypes), this);
 
             var converter = cm.GetConverter<string, int, Attribute>();
 
@@ -427,7 +427,7 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests
         }
 
 
-        private class TestConverter5
+        private class TestConverterFakeEntity
         {
             public IFakeEntity Convert(JObject obj)
             {
@@ -435,7 +435,7 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests
             }
         }
 
-        private class TestConverter5<T>
+        private class TestConverterFakeEntity<T>
         {
             public IFakeEntity Convert(T item)
             {
@@ -451,15 +451,15 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests
         // Poco is a base class of  Jobject and IFakeEntity.
         // Give each rule its own unique converter and ensure each converter is called.  
         [Fact]
-        public void Test()
+        public void TestConvertFakeEntity()
         {
             var cm = new ConverterManager();
 
             // Derived<ITableEntity> --> IFakeEntity  [automatic] 
             // JObject --> IFakeEntity
             // Poco --> IFakeEntity
-            cm.AddConverterBuilder<JObject, IFakeEntity, Attribute>(typeof(TestConverter5));
-            cm.AddConverterBuilder<OpenType, IFakeEntity, Attribute>(typeof(TestConverter5<>));
+            cm.AddConverterBuilder<JObject, IFakeEntity, Attribute>(typeof(TestConverterFakeEntity));
+            cm.AddConverterBuilder<OpenType, IFakeEntity, Attribute>(typeof(TestConverterFakeEntity<>));
 
             {
                 var converter = cm.GetConverter<IFakeEntity, IFakeEntity, Attribute>();

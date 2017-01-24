@@ -6,7 +6,12 @@ using System;
 namespace Microsoft.Azure.WebJobs.Host.Bindings
 {
     /// <summary>
-    /// Placeholder to use with converter manager for describing open types.     
+    /// Placeholder to use with converter manager for describing generic types.     
+    /// Derived classes can override IsMatch to provide a constraint. 
+    ///  OpenType matches any type. 
+    ///  MyDerivedType matches any type where IsMatch(type) is true. 
+    /// Also applies to generics such as: 
+    ///  GenericClass&lt;OpenType&gt; 
     /// </summary>
     public abstract class OpenType
     {

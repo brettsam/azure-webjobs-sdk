@@ -68,10 +68,10 @@ namespace Microsoft.Azure.WebJobs.Host.Tables
             var original = new TableAttributeBindingProvider(nameResolver, accountProvider, extensions);
 
             converterManager.AddConverter<JObject, ITableEntity, TableAttribute>(original.JObjectToTableEntityConverterFunc);            
-            converterManager.AddConverterBuilder<object, ITableEntity, TableAttribute>(typeof(Object2ITableEntityConverter<>));
+            converterManager.AddConverterBuilder<object, ITableEntity, TableAttribute>(typeof(ObjectToITableEntityConverter<>));
 
             // IStorageTable --> IQueryable<ITableEntity>
-            converterManager.AddConverterBuilder<IStorageTable, IQueryable<OpenType>, TableAttribute>(typeof(Table2IQueryableConverter<>));
+            converterManager.AddConverterBuilder<IStorageTable, IQueryable<OpenType>, TableAttribute>(typeof(TableToIQueryableConverter<>));
             
             var bindingFactory = new BindingFactory(nameResolver, converterManager);
 
@@ -188,7 +188,7 @@ namespace Microsoft.Azure.WebJobs.Host.Tables
             if (bindsToEntireTable)
             {
                 // This should have been caught by the other rule-based binders. 
-                // We never except this to get thrown. 
+                // We never expect this to get thrown. 
                 throw new InvalidOperationException("Can't bind Table to type '" + parameter.ParameterType + "'.");
             }            
             else
@@ -329,9 +329,9 @@ namespace Microsoft.Azure.WebJobs.Host.Tables
 
         // IStorageTable --> IQueryable<T>
         // ConverterManager's pattern matcher will figure out TElement. 
-        private class Table2IQueryableConverter<TElement> where TElement : ITableEntity, new()
+        private class TableToIQueryableConverter<TElement> where TElement : ITableEntity, new()
         {
-            public Table2IQueryableConverter()
+            public TableToIQueryableConverter()
             {
                 // We're now commited to an IQueryable. Verify other constraints. 
                 Type entityType = typeof(TElement);
@@ -363,11 +363,11 @@ namespace Microsoft.Azure.WebJobs.Host.Tables
         }
 
         // Convert from T --> ITableEntity
-        private class Object2ITableEntityConverter<TElement>
+        private class ObjectToITableEntityConverter<TElement>
         {
             private static readonly IConverter<TElement, ITableEntity> Converter = PocoToTableEntityConverter<TElement>.Create();
 
-            public Object2ITableEntityConverter()
+            public ObjectToITableEntityConverter()
             {
                 // JObject case should have been claimed by another converter. 
                 // So we can statically enforce an ITableEntity compatible contract
@@ -376,7 +376,7 @@ namespace Microsoft.Azure.WebJobs.Host.Tables
                 TableClient.VerifyContainsProperty(t, "PartitionKey");
             }
 
-            public ITableEntity Convert(TElement item)
+            public static ITableEntity Convert(TElement item)
             {
                 return Converter.Convert(item);
             }

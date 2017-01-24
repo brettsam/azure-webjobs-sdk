@@ -73,8 +73,8 @@ namespace Microsoft.Azure.WebJobs.Host.Bindings
                 return method;
             }
 
-            throw new InvalidOperationException("No Convert method on type " + typeConverter.Name + " to convert from " +
-                typeSource.Name + " to " + typeDest.Name);
+            throw new InvalidOperationException($"No Convert method on type {typeConverter.Name} to convert from " +
+                $"{typeSource.Name} to {typeDest.Name}");
         }
 
         // Create an instance for method.DeclaringType, passing constructorArgs.
@@ -132,8 +132,9 @@ namespace Microsoft.Azure.WebJobs.Host.Bindings
         private static MethodInfo ResolveMethod(Type type, MethodInfo method)
         {
             foreach (var candidate in type.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance))
-            {
-                if (candidate.MetadataToken == method.MetadataToken)
+            {                
+                if (candidate.MetadataToken == method.MetadataToken && 
+                    candidate.DeclaringType.Assembly == method.DeclaringType.Assembly)
                 {
                     return candidate;
                 }
@@ -153,7 +154,8 @@ namespace Microsoft.Azure.WebJobs.Host.Bindings
             return true;
         }
 
-        // Return truen if the types are compatible. 
+        // Check if specificType is a valid instance of openType. 
+        // Return true if the types are compatible. 
         // If openType has generic args, then add a [Name,Type] entry to the genericArgs dictionary. 
         private static bool CheckArg(Type openType, Type specificType, Dictionary<string, Type> genericArgs)
         {
