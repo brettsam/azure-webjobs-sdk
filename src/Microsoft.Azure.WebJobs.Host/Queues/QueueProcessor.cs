@@ -110,6 +110,14 @@ namespace Microsoft.Azure.WebJobs.Host.Queues
         /// <returns></returns>
         public virtual async Task CompleteProcessingMessageAsync(CloudQueueMessage message, FunctionResult result, CancellationToken cancellationToken)
         {
+            // These values may change if the message is inserted into another queue. We'll store them here and make sure
+            // the message always has the original values before we pass it to a customer-facing method.
+            string id = message.Id;
+            string popReceipt = message.PopReceipt;
+            DateTimeOffset? insertionTime = message.InsertionTime;
+            DateTimeOffset? nextVisibleTime = message.NextVisibleTime;
+            DateTimeOffset? expirationTime = message.ExpirationTime;
+
             if (result.Succeeded)
             {
                 await DeleteMessageAsync(message, cancellationToken);
@@ -119,6 +127,9 @@ namespace Microsoft.Azure.WebJobs.Host.Queues
                 if (message.DequeueCount >= MaxDequeueCount)
                 {
                     await CopyMessageToPoisonQueueAsync(message, _poisonQueue, cancellationToken);
+
+                    message.SetProperties(id, popReceipt, insertionTime, nextVisibleTime, expirationTime);
+
                     await DeleteMessageAsync(message, cancellationToken);
                 }
                 else
