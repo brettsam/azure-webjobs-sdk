@@ -244,12 +244,22 @@ namespace Microsoft.Azure.WebJobs.Host.Queues.Listeners
 
         internal async Task ProcessMessageAsync(IStorageQueueMessage message, TimeSpan visibilityTimeout, CancellationToken cancellationToken)
         {
+            // These values may change if the message is inserted into another queue. We'll store them here and make sure
+            // the message always has the original values before we pass it to a customer-facing method.
+            string id = message.Id;
+            string popReceipt = message.PopReceipt;
+            DateTimeOffset? insertionTime = message.InsertionTime;
+            DateTimeOffset? nextVisibleTime = message.NextVisibleTime;
+            DateTimeOffset? expirationTime = message.ExpirationTime;
+
             try
             {
                 if (!await _queueProcessor.BeginProcessingMessageAsync(message.SdkObject, cancellationToken))
                 {
                     return;
                 }
+
+                message.SdkObject.SetProperties(id, popReceipt, insertionTime, nextVisibleTime, expirationTime);
 
                 FunctionResult result = null;
                 using (ITaskSeriesTimer timer = CreateUpdateMessageVisibilityTimer(_queue, message, visibilityTimeout, _exceptionHandler))
@@ -260,6 +270,8 @@ namespace Microsoft.Azure.WebJobs.Host.Queues.Listeners
 
                     await timer.StopAsync(cancellationToken);
                 }
+
+                message.SdkObject.SetProperties(id, popReceipt, insertionTime, nextVisibleTime, expirationTime);
 
                 await _queueProcessor.CompleteProcessingMessageAsync(message.SdkObject, result, cancellationToken);
             }
