@@ -14,7 +14,6 @@ using Microsoft.Azure.WebJobs.Host.Indexers;
 using Microsoft.Azure.WebJobs.Host.Listeners;
 using Microsoft.Azure.WebJobs.Host.Protocols;
 using Microsoft.Azure.WebJobs.Logging;
-using Microsoft.Extensions.Logging;
 using Microsoft.WindowsAzure.Storage;
 
 namespace Microsoft.Azure.WebJobs
@@ -47,8 +46,6 @@ namespace Microsoft.Azure.WebJobs
         private Task _stopTask;
         private object _stopTaskLock = new object();
         private bool _disposed;
-
-        private ILogger _logger;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="JobHost"/> class, using a Microsoft Azure Storage connection
@@ -119,9 +116,7 @@ namespace Microsoft.Azure.WebJobs
 
             await _listener.StartAsync(cancellationToken);
 
-            string msg = "Job host started";
-            _context.Trace.Info(msg, Host.TraceSource.Host);
-            _logger?.LogInformation(msg);
+            _context.LogContext.LogInformation(LogCategories.Startup, "Job host started");
 
             _state = StateStarted;
         }
@@ -169,9 +164,7 @@ namespace Microsoft.Azure.WebJobs
                 await functionEventCollector.FlushAsync(cancellationToken);
             }
 
-            string msg = "Job host stopped";
-            _context.Trace.Info(msg, Host.TraceSource.Host);
-            _logger?.LogInformation(msg);
+            _context.LogContext.LogInformation(LogCategories.Startup, "Job host Stopped");
         }
 
         /// <summary>Runs the host and blocks the current thread while the host remains running.</summary>
@@ -341,8 +334,6 @@ namespace Microsoft.Azure.WebJobs
                     _listener = context.Listener;
                 }
             }
-
-            _logger = _context.LoggerFactory?.CreateLogger(LogCategories.Startup);
 
             return _context;
         }

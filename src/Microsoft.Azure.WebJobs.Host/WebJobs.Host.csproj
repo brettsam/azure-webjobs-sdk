@@ -497,6 +497,7 @@
     <Compile Include="Exceptions\RecoverableException.cs" />
     <Compile Include="JobHostBlobsConfiguration.cs" />
     <Compile Include="Listeners\FunctionListener.cs" />
+    <Compile Include="Loggers\LogContext.cs" />
     <Compile Include="Loggers\Logger\Aggregator\FunctionResultAggregatorConfiguration.cs" />
     <Compile Include="Loggers\Logger\Aggregator\FunctionResultAggregate.cs" />
     <Compile Include="Loggers\Logger\Aggregator\FunctionResultAggregator.cs" />

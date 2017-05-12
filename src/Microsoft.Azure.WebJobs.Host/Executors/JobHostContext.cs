@@ -5,7 +5,6 @@ using System;
 using Microsoft.Azure.WebJobs.Host.Indexers;
 using Microsoft.Azure.WebJobs.Host.Listeners;
 using Microsoft.Azure.WebJobs.Host.Loggers;
-using Microsoft.Extensions.Logging;
 
 namespace Microsoft.Azure.WebJobs.Host.Executors
 {
@@ -16,33 +15,30 @@ namespace Microsoft.Azure.WebJobs.Host.Executors
         private readonly IFunctionIndexLookup _functionLookup;
         private readonly IFunctionExecutor _executor;
         private readonly IListener _listener;
-        private readonly TraceWriter _trace;
+        private readonly LogContext _logContext;
         private readonly IAsyncCollector<FunctionInstanceLogEntry> _functionEventCollector; // optional        
-        private readonly ILoggerFactory _loggerFactory;
 
         private bool _disposed;
 
         public JobHostContext(IFunctionIndexLookup functionLookup,
             IFunctionExecutor executor,
             IListener listener,
-            TraceWriter trace,
-            IAsyncCollector<FunctionInstanceLogEntry> functionEventCollector = null,
-            ILoggerFactory loggerFactory = null)
+            LogContext logContext,
+            IAsyncCollector<FunctionInstanceLogEntry> functionEventCollector = null)
         {
             _functionLookup = functionLookup;
             _executor = executor;
             _listener = listener;
-            _trace = trace;
+            _logContext = logContext;
             _functionEventCollector = functionEventCollector;
-            _loggerFactory = loggerFactory;
         }
 
-        public TraceWriter Trace
+        public LogContext LogContext
         {
             get
             {
                 ThrowIfDisposed();
-                return _trace;
+                return _logContext;
             }
         }
 
@@ -82,21 +78,12 @@ namespace Microsoft.Azure.WebJobs.Host.Executors
             }
         }
 
-        public ILoggerFactory LoggerFactory
-        {
-            get
-            {
-                ThrowIfDisposed();
-                return _loggerFactory;
-            }
-        }
-
         public void Dispose()
         {
             if (!_disposed)
             {
                 _listener.Dispose();
-                _loggerFactory?.Dispose();
+                _logContext?.Dispose();
 
                 _disposed = true;
             }

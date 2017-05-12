@@ -6,6 +6,7 @@ using System.Diagnostics;
 using Microsoft.Azure.WebJobs.Host.Executors;
 using Microsoft.Azure.WebJobs.Host.Indexers;
 using Microsoft.Azure.WebJobs.Host.Listeners;
+using Microsoft.Azure.WebJobs.Host.Loggers;
 using Microsoft.Azure.WebJobs.Host.TestCommon;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -28,15 +29,17 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests
             mockListener.Setup(p => p.Dispose());
             mockLoggerFactory.Setup(p => p.Dispose());
 
-            var context = new JobHostContext(mockLookup.Object, mockExecutor.Object, mockListener.Object, traceWriter, loggerFactory: mockLoggerFactory.Object);
+            var logContext = new LogContext(traceWriter, mockLoggerFactory.Object);
 
-            Assert.Same(traceWriter, context.Trace);
+            var context = new JobHostContext(mockLookup.Object, mockExecutor.Object, mockListener.Object, logContext);
+
+            Assert.Same(traceWriter, logContext.TraceWriter);
 
             context.Dispose();
 
             Assert.Throws<ObjectDisposedException>(() =>
             {
-                context.Trace.Info("Kaboom!");
+                context.LogContext.TraceWriter.Info("Kaboom!");
             });
 
             // verify that calling Dispose again is a noop

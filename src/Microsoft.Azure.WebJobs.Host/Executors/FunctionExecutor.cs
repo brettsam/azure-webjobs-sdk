@@ -27,7 +27,7 @@ namespace Microsoft.Azure.WebJobs.Host.Executors
         private readonly IFunctionInstanceLogger _functionInstanceLogger;
         private readonly IFunctionOutputLogger _functionOutputLogger;
         private readonly IWebJobsExceptionHandler _exceptionHandler;
-        private readonly TraceWriter _trace;
+        private readonly LogContext _logContext;
         private readonly IAsyncCollector<FunctionInstanceLogEntry> _functionEventCollector;
         private readonly ILogger _logger;
         private readonly ILogger _resultsLogger;
@@ -35,38 +35,36 @@ namespace Microsoft.Azure.WebJobs.Host.Executors
         private HostOutputMessage _hostOutputMessage;
 
         public FunctionExecutor(IFunctionInstanceLogger functionInstanceLogger, IFunctionOutputLogger functionOutputLogger,
-                IWebJobsExceptionHandler exceptionHandler, TraceWriter trace, IAsyncCollector<FunctionInstanceLogEntry> functionEventCollector = null,
-                ILoggerFactory loggerFactory = null)
+                IWebJobsExceptionHandler exceptionHandler, LogContext logContext, IAsyncCollector<FunctionInstanceLogEntry> functionEventCollector = null)
         {
             if (functionInstanceLogger == null)
             {
-                throw new ArgumentNullException("functionInstanceLogger");
+                throw new ArgumentNullException(nameof(functionInstanceLogger));
             }
 
             if (functionOutputLogger == null)
             {
-                throw new ArgumentNullException("functionOutputLogger");
+                throw new ArgumentNullException(nameof(functionOutputLogger));
             }
 
             if (exceptionHandler == null)
             {
-                throw new ArgumentNullException("exceptionHandler");
+                throw new ArgumentNullException(nameof(exceptionHandler));
             }
 
-            if (trace == null)
+            if (logContext == null)
             {
-                throw new ArgumentNullException("trace");
+                throw new ArgumentNullException(nameof(logContext));
             }
-
             _functionInstanceLogger = functionInstanceLogger;
             _functionOutputLogger = functionOutputLogger;
             _exceptionHandler = exceptionHandler;
-            _trace = trace;
+            _logContext = logContext;
             _functionEventCollector = functionEventCollector;
-            _logger = loggerFactory?.CreateLogger(LogCategories.Executor);
-            _resultsLogger = loggerFactory?.CreateLogger(LogCategories.Results);
+            _logger = _logContext.LoggerFactory?.CreateLogger(LogCategories.Executor);
+            _resultsLogger = _logContext.LoggerFactory?.CreateLogger(LogCategories.Results);
         }
-
+        
         public HostOutputMessage HostOutputMessage
         {
             get { return _hostOutputMessage; }
@@ -229,7 +227,7 @@ namespace Microsoft.Azure.WebJobs.Host.Executors
                 {
                     // We create a new composite trace writer that will also forward
                     // output to the function output log (in addition to console, user TraceWriter, etc.).                    
-                    TraceWriter functionTraceWriter = new FunctionInstanceTraceWriter(instance, HostOutputMessage.HostInstanceId, _trace, functionTraceLevel);
+                    TraceWriter functionTraceWriter = new FunctionInstanceTraceWriter(instance, HostOutputMessage.HostInstanceId, _logContext.TraceWriter, functionTraceLevel);
                     TraceWriter traceWriter = new CompositeTraceWriter(functionTraceWriter, functionOutputTextWriter, functionTraceLevel);
 
                     // Must bind before logging (bound invoke string is included in log message).

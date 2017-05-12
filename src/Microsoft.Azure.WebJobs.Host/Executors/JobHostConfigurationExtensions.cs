@@ -178,6 +178,9 @@ namespace Microsoft.Azure.WebJobs.Host.Executors
             var blobsConfiguration = config.Blobs;
 
             TraceWriter trace = services.GetService<TraceWriter>();
+
+            LogContext logContext = new LogContext(trace, loggerFactory);
+
             IAsyncCollector<FunctionInstanceLogEntry> registeredFunctionEventCollector = services.GetService<IAsyncCollector<FunctionInstanceLogEntry>>();
 
             if (registeredFunctionEventCollector != null && aggregator != null)
@@ -238,7 +241,7 @@ namespace Microsoft.Azure.WebJobs.Host.Executors
 
                 if (functionExecutor == null)
                 {
-                    functionExecutor = new FunctionExecutor(functionInstanceLogger, functionOutputLogger, exceptionHandler, trace, functionEventCollector, loggerFactory);
+                    functionExecutor = new FunctionExecutor(functionInstanceLogger, functionOutputLogger, exceptionHandler, logContext, functionEventCollector);
                     services.AddService(functionExecutor);
                 }
 
@@ -333,22 +336,15 @@ namespace Microsoft.Azure.WebJobs.Host.Executors
                 IEnumerable<FunctionDescriptor> descriptors = functions.ReadAllDescriptors();
                 int descriptorsCount = descriptors.Count();
 
-                ILogger startupLogger = loggerFactory?.CreateLogger(LogCategories.Startup);
-
                 if (config.UsingDevelopmentSettings)
                 {
-                    string msg = "Development settings applied";
-                    trace.Verbose(msg);
-                    startupLogger?.LogDebug(msg);
+                    logContext.LogDebug(LogCategories.Startup, "Development settings applied.");
                 }
 
                 if (descriptorsCount == 0)
                 {
-                    string msg = string.Format("No job functions found. Try making your job classes and methods public. {0}",
-                        Constants.ExtensionInitializationMessage);
-
-                    trace.Warning(msg, Host.TraceSource.Indexing);
-                    startupLogger?.LogWarning(msg);
+                    logContext.LogWarning(LogCategories.Startup, string.Format("No job functions found. Try making your job classes and methods public. {0}",
+                        Constants.ExtensionInitializationMessage));
                 }
                 else
                 {
@@ -359,12 +355,11 @@ namespace Microsoft.Azure.WebJobs.Host.Executors
                     {
                         functionsTrace.AppendLine(descriptor.FullName);
                     }
-                    string msg = functionsTrace.ToString();
-                    trace.Info(msg, Host.TraceSource.Indexing);
-                    startupLogger?.LogInformation(msg);
+
+                    logContext.LogInformation(LogCategories.Startup, functionsTrace.ToString());
                 }
 
-                return new JobHostContext(functions, hostCallExecutor, listener, trace, functionEventCollector, loggerFactory);
+                return new JobHostContext(functions, hostCallExecutor, listener, logContext, functionEventCollector);
             }
         }
 
