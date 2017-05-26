@@ -8,7 +8,6 @@ using System.Net.Http;
 using System.Web;
 using Microsoft.ApplicationInsights;
 using Microsoft.ApplicationInsights.DataContracts;
-using Microsoft.Azure.WebJobs.Host.Loggers;
 using Microsoft.Extensions.Logging;
 
 namespace Microsoft.Azure.WebJobs.Logging.ApplicationInsights
@@ -46,29 +45,146 @@ namespace Microsoft.Azure.WebJobs.Logging.ApplicationInsights
                 return;
             }
 
-            // Log a function result
             if (_categoryName == LogCategories.Results)
             {
+                // Log a function result
                 LogFunctionResult(stateValues, exception);
-                return;
             }
-
-            // Log an aggregate record
-            if (_categoryName == LogCategories.Aggregator)
+            else if (_categoryName == LogCategories.Aggregator)
             {
+                // Log an aggregate record
                 LogFunctionResultAggregate(stateValues);
-                return;
             }
-
-            // Log an exception
-            if (exception != null)
+            else if (exception != null)
             {
+                // Log an exception
                 LogException(logLevel, stateValues, exception, formattedMessage);
-                return;
+            }
+            else if (eventId.Id == LogEvents.Metric)
+            {
+                // Log a metric
+                LogMetric(stateValues);
+            }
+            else if (eventId.Id == LogEvents.Dependency)
+            {
+                // Log a depencency
+                LogDepencency(stateValues);
+            }
+            else
+            {
+                // Otherwise, log a trace
+                LogTrace(logLevel, stateValues, formattedMessage);
+            }
+        }
+
+        private void LogDepencency(IEnumerable<KeyValuePair<string, object>> values)
+        {
+            // Pull out the relevant values to construct the Telemetry.
+            DependencyTelemetry telemetry = new DependencyTelemetry();
+
+            foreach (KeyValuePair<string, object> value in values)
+            {
+                switch (value.Key)
+                {
+                    case LoggingKeys.DependencyType:
+                        telemetry.Type = value.Value.ToString();
+                        break;
+                    case LoggingKeys.DependencyTarget:
+                        telemetry.Target = value.Value.ToString();
+                        break;
+                    case LoggingKeys.Name:
+                        telemetry.Name = value.Value.ToString();
+                        break;
+                    case LoggingKeys.DependencyData:
+                        telemetry.Data = value.Value.ToString();
+                        break;
+                    case LoggingKeys.Timestamp:
+                        if (value.Value is DateTimeOffset)
+                        {
+                            telemetry.Timestamp = (DateTimeOffset)value.Value;
+                        }
+                        break;
+                    case LoggingKeys.Duration:
+                        if (value.Value is TimeSpan)
+                        {
+                            telemetry.Duration = (TimeSpan)value.Value;
+                        }
+                        break;
+                    case LoggingKeys.DependencyResultCode:
+                        telemetry.ResultCode = value.Value.ToString();
+                        break;
+                    case LoggingKeys.Succeeded:
+                        if (value.Value is bool)
+                        {
+                            telemetry.Success = (bool)value.Value;
+                        }
+                        break;
+                    default:
+                        break;
+                }
             }
 
-            // Otherwise, log a trace
-            LogTrace(logLevel, stateValues, formattedMessage);
+            _telemetryClient.TrackDependency(telemetry);
+        }
+
+        private void LogMetric(IEnumerable<KeyValuePair<string, object>> values)
+        {
+            // Pull out the relevant metric values to construct the Telemetry. All other values are custom properties.
+            IDictionary<string, object> customProperties = new Dictionary<string, object>();
+            MetricTelemetry telemetry = new MetricTelemetry();
+
+            foreach (KeyValuePair<string, object> value in values)
+            {
+                switch (value.Key)
+                {
+                    case LoggingKeys.MetricName:
+                        telemetry.Name = value.Value.ToString();
+                        break;
+                    case LoggingKeys.MetricValue:
+                        if (double.TryParse(value.Value.ToString(), out double valueResult))
+                        {
+                            telemetry.Value = valueResult;
+                        }
+                        break;
+                    case LoggingKeys.MetricMin:
+                        if (double.TryParse(value.Value.ToString(), out double minResult))
+                        {
+                            telemetry.Min = minResult;
+                        }
+                        break;
+                    case LoggingKeys.MetricMax:
+                        if (double.TryParse(value.Value.ToString(), out double maxResult))
+                        {
+                            telemetry.Max = maxResult;
+                        }
+                        break;
+                    case LoggingKeys.MetricStandardDeviation:
+                        if (double.TryParse(value.Value.ToString(), out double stdDevResult))
+                        {
+                            telemetry.StandardDeviation = stdDevResult;
+                        }
+                        break;
+                    case LoggingKeys.MetricSum:
+                        if (double.TryParse(value.Value.ToString(), out double sumResult))
+                        {
+                            telemetry.Sum = sumResult;
+                        }
+                        break;
+                    case LoggingKeys.Count:
+                        if (int.TryParse(value.Value.ToString(), out int countResult))
+                        {
+                            telemetry.Count = countResult;
+                        }
+                        break;
+                    default:
+                        customProperties.Add(value);
+                        break;
+                }
+            }
+
+            telemetry.Timestamp = DateTimeOffset.UtcNow;
+            ApplyCustomProperties(telemetry, values);
+            _telemetryClient.TrackMetric(telemetry);
         }
 
         private void LogException(LogLevel logLevel, IEnumerable<KeyValuePair<string, object>> values, Exception exception, string formattedMessage)
@@ -171,9 +287,9 @@ namespace Microsoft.Azure.WebJobs.Logging.ApplicationInsights
                             // if it's a TimeSpan, log the milliseconds
                             metrics.Add(value.Key, ((TimeSpan)value.Value).TotalMilliseconds);
                         }
-                        else if (value.Value is double || value.Value is int)
+                        else if (double.TryParse(value.Value.ToString(), out double doubleResult))
                         {
-                            metrics.Add(value.Key, Convert.ToDouble(value.Value));
+                            metrics.Add(value.Key, doubleResult);
                         }
 
                         // do nothing otherwise
