@@ -12,6 +12,7 @@ using Microsoft.Azure.WebJobs.Host.Executors;
 using Microsoft.Azure.WebJobs.Host.Protocols;
 using Microsoft.Azure.WebJobs.Host.Storage;
 using Microsoft.Azure.WebJobs.Host.Storage.Queue;
+using Microsoft.Extensions.Logging;
 using Microsoft.WindowsAzure.Storage.Queue;
 using Newtonsoft.Json.Linq;
 
@@ -20,7 +21,7 @@ namespace Microsoft.Azure.WebJobs.Host.Queues.Bindings
     // Write up bindinging rules for [Queue] attribute. 
     // This is fundemantentally an IAsyncCollector<IStorageQueueMessage>
     internal class QueueExtension : IExtensionConfigProvider
-    {      
+    {
         public QueueExtension()
         {
         }
@@ -41,15 +42,18 @@ namespace Microsoft.Azure.WebJobs.Host.Queues.Bindings
         // so capture that and create new binding rules per host instance. 
         private class PerHostConfig
         {
+            private ILoggerFactory _loggerFactory;
+
             // Fields that the various binding funcs need to close over. 
             private IStorageAccountProvider _accountProvider;
 
             // Optimization where a queue output can directly trigger a queue input. 
             // This is per-host (not per-config)
             private ContextAccessor<IMessageEnqueuedWatcher> _messageEnqueuedWatcherGetter;
-            
+
             public void Initialize(ExtensionConfigContext context)
             {
+                _loggerFactory = context.Config.LoggerFactory;
                 _messageEnqueuedWatcherGetter = context.PerHostServices.GetService<ContextAccessor<IMessageEnqueuedWatcher>>();
                 _accountProvider = context.Config.GetService<IStorageAccountProvider>();
 
@@ -182,7 +186,7 @@ namespace Microsoft.Azure.WebJobs.Host.Queues.Bindings
             private IAsyncCollector<IStorageQueueMessage> BuildFromQueueAttribute(QueueAttribute attrResolved)
             {
                 IStorageQueue queue = GetQueue(attrResolved);
-                return new QueueAsyncCollector(queue, _messageEnqueuedWatcherGetter.Value);
+                return new QueueAsyncCollector(queue, _messageEnqueuedWatcherGetter.Value, _loggerFactory);
             }
 
             internal IStorageQueue GetQueue(QueueAttribute attrResolved)
@@ -197,8 +201,8 @@ namespace Microsoft.Azure.WebJobs.Host.Queues.Bindings
             }
         }
 
-        private class QueueBuilder : 
-            IAsyncConverter<QueueAttribute, IStorageQueue>, 
+        private class QueueBuilder :
+            IAsyncConverter<QueueAttribute, IStorageQueue>,
             IAsyncConverter<QueueAttribute, CloudQueue>
         {
             private readonly PerHostConfig _bindingProvider;
@@ -232,11 +236,13 @@ namespace Microsoft.Azure.WebJobs.Host.Queues.Bindings
         {
             private readonly IStorageQueue _queue;
             private readonly IMessageEnqueuedWatcher _messageEnqueuedWatcher;
+            private readonly ILogger _logger;
 
-            public QueueAsyncCollector(IStorageQueue queue, IMessageEnqueuedWatcher messageEnqueuedWatcher)
+            public QueueAsyncCollector(IStorageQueue queue, IMessageEnqueuedWatcher messageEnqueuedWatcher, ILoggerFactory loggerFactory)
             {
-                this._queue = queue;
-                this._messageEnqueuedWatcher = messageEnqueuedWatcher;
+                _queue = queue;
+                _messageEnqueuedWatcher = messageEnqueuedWatcher;
+                _logger = loggerFactory.CreateLogger("Host.Bindings.Queue");
             }
 
             public async Task AddAsync(IStorageQueueMessage message, CancellationToken cancellationToken = default(CancellationToken))
@@ -246,7 +252,7 @@ namespace Microsoft.Azure.WebJobs.Host.Queues.Bindings
                     throw new InvalidOperationException("Cannot enqueue a null queue message instance.");
                 }
 
-                await _queue.AddMessageAndCreateIfNotExistsAsync(message, cancellationToken);
+                await _queue.AddMessageAndCreateIfNotExistsAsync(message, _logger, LogLevel.Information, cancellationToken);
 
                 if (_messageEnqueuedWatcher != null)
                 {

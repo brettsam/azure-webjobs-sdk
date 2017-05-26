@@ -119,5 +119,60 @@ namespace Microsoft.Azure.WebJobs.Logging
         /// Gets the name of the key used to store the original format of the log message.
         /// </summary>
         public const string OriginalFormat = "{OriginalFormat}";
+
+        /// <summary>
+        /// Gets the name of the key used to store a metric name. 
+        /// </summary>        
+        public const string MetricName = "MetricName";
+
+        /// <summary>
+        /// Gets the name of the key used to store a metric value.
+        /// </summary>        
+        public const string MetricValue = "MetricValue";
+
+        /// <summary>
+        /// Gets the name of the key used to store a metric minimum value. 
+        /// </summary>        
+        public const string MetricMin = "MetricMin";
+
+        /// <summary>
+        /// Gets the name of the key used to store a metric maximum value. 
+        /// </summary>        
+        public const string MetricMax = "MetricMax";
+
+        /// <summary>
+        /// Gets the name of the key used to store a metric sum value. 
+        /// </summary>        
+        public const string MetricSum = "MetricSum";
+
+        /// <summary>
+        /// Gets the name of the key used to store a metric standard deviation value. 
+        /// </summary>        
+        public const string MetricStandardDeviation = "MetricStandardDeviation";
+
+        /// <summary>
+        /// Gets the name of the key used to store a metric count value. 
+        /// </summary>        
+        public const string MetricMaxValue = "MetricCount";
+
+        /// <summary>
+        /// Gets the name of the key used to store a dependency type.
+        /// </summary>
+        public const string DependencyType = "DependencyType";
+
+        /// <summary>
+        /// Gets the name of the key used to store a dependency target.
+        /// </summary>
+        public const string DependencyTarget = "DependencyTarget";
+
+        /// <summary>
+        /// Gets the name of the key used to store dependency data.
+        /// </summary>
+        public const string DependencyData = "DependencyData";
+
+        /// <summary>
+        /// Gets the name of the key used to store a dependency result.
+        /// </summary>
+        public const string DependencyResultCode = "DependencyResultCode";
     }
 }

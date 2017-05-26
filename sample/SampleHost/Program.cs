@@ -2,6 +2,8 @@
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
 using System;
+using System.Diagnostics;
+using System.Net;
 using Microsoft.Azure.WebJobs;
 using Microsoft.Azure.WebJobs.Logging;
 using Microsoft.Extensions.Logging;
@@ -12,6 +14,7 @@ namespace SampleHost
     {
         static void Main(string[] args)
         {
+            ServicePointManager.DefaultConnectionLimit = Int32.MaxValue;
             var config = new JobHostConfiguration();
             config.Queues.VisibilityTimeout = TimeSpan.FromSeconds(15);
             config.Queues.MaxDequeueCount = 3;
@@ -42,6 +45,8 @@ namespace SampleHost
                 config.LoggerFactory = new LoggerFactory()
                     .AddApplicationInsights(instrumentationKey, filter.Filter)
                     .AddConsole(filter.Filter);
+
+                config.Tracing.ConsoleLevel = TraceLevel.Off;
             }
         }
     }
