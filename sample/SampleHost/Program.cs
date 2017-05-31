@@ -2,6 +2,7 @@
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
 using System;
+using System.Diagnostics;
 using Microsoft.Azure.WebJobs;
 using Microsoft.Azure.WebJobs.Logging;
 using Microsoft.Extensions.Logging;
@@ -23,6 +24,8 @@ namespace SampleHost
 
             CheckAndEnableAppInsights(config);
 
+            config.Queues.BatchSize = 1;
+
             var host = new JobHost(config);
             host.RunAndBlock();
         }
@@ -33,15 +36,17 @@ namespace SampleHost
             string instrumentationKey = Environment.GetEnvironmentVariable("APPINSIGHTS_INSTRUMENTATIONKEY");
             if (!string.IsNullOrEmpty(instrumentationKey))
             {
-                var filter = new LogCategoryFilter();
-                filter.DefaultLevel = LogLevel.Debug;
-                filter.CategoryLevels[LogCategories.Function] = LogLevel.Debug;
-                filter.CategoryLevels[LogCategories.Results] = LogLevel.Debug;
-                filter.CategoryLevels[LogCategories.Aggregator] = LogLevel.Debug;
+                var aiFilter = new LogCategoryFilter();
+                aiFilter.DefaultLevel = LogLevel.Information;
+
+                var conFilter = new LogCategoryFilter();
+                conFilter.DefaultLevel = LogLevel.Information;
 
                 config.LoggerFactory = new LoggerFactory()
-                    .AddApplicationInsights(instrumentationKey, filter.Filter)
-                    .AddConsole(filter.Filter);
+                    .AddApplicationInsights(instrumentationKey, aiFilter.Filter)
+                    .AddConsole(conFilter.Filter);
+
+                config.Tracing.ConsoleLevel = TraceLevel.Off;
             }
         }
     }

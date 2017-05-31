@@ -9,9 +9,9 @@ namespace Microsoft.Azure.WebJobs.Logging.ApplicationInsights
 {
     internal class DictionaryLoggerScope
     {
-        private readonly object _state;
+        private readonly IDictionary<string, object> _state;
 
-        private DictionaryLoggerScope(object state, DictionaryLoggerScope parent)
+        private DictionaryLoggerScope(IDictionary<string, object> state, DictionaryLoggerScope parent)
         {
             _state = state;
             Parent = parent;
@@ -33,9 +33,21 @@ namespace Microsoft.Azure.WebJobs.Logging.ApplicationInsights
             }
         }
 
+        public void Add(string key, object value)
+        {
+            _state[key] = value;
+        }
+
         public static IDisposable Push(object state)
         {
-            Current = new DictionaryLoggerScope(state, Current);
+            var stateDictionary = state as IDictionary<string, object>;
+
+            if (stateDictionary == null)
+            {
+                stateDictionary = new Dictionary<string, object>();
+            }
+
+            Current = new DictionaryLoggerScope(stateDictionary, Current);
             return new DisposableScope();
         }
 
@@ -62,7 +74,7 @@ namespace Microsoft.Azure.WebJobs.Logging.ApplicationInsights
             return scopeInfo;
         }
 
-        private IDictionary<string, object> GetStateDictionary() => _state as IDictionary<string, object>;
+        private IDictionary<string, object> GetStateDictionary() => _state;
 
         private class DisposableScope : IDisposable
         {

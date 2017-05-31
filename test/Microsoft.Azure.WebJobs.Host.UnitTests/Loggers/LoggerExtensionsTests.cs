@@ -51,7 +51,7 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests.Loggers
 
             var result = CreateDefaultInstanceLogEntry();
 
-            logger.LogFunctionResult(_functionShortName, result, TimeSpan.FromMilliseconds(450));
+            logger.LogFunctionResult(_functionShortName, result);
 
             Assert.Equal(1, logCount);
         }
@@ -78,7 +78,8 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests.Loggers
 
             var fex = new FunctionInvocationException("Failed");
 
-            logger.LogFunctionResult(_functionShortName, result, TimeSpan.FromMilliseconds(450), fex);
+            logger.LogFunctionStart();
+            logger.LogFunctionResult(_functionShortName, result, fex);
 
             Assert.Equal(1, logCount);
         }

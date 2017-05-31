@@ -8,7 +8,6 @@ using System.Net.Http;
 using System.Web;
 using Microsoft.ApplicationInsights;
 using Microsoft.ApplicationInsights.DataContracts;
-using Microsoft.Azure.WebJobs.Host.Loggers;
 using Microsoft.Extensions.Logging;
 
 namespace Microsoft.Azure.WebJobs.Logging.ApplicationInsights
@@ -19,6 +18,7 @@ namespace Microsoft.Azure.WebJobs.Logging.ApplicationInsights
         private readonly string _categoryName;
         private const string DefaultCategoryName = "Default";
         private const string DateTimeFormatString = "yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fffK";
+        private const string RequestKey = "MS_RequestTelemetry";
         private Func<string, LogLevel, bool> _filter;
 
         public ApplicationInsightsLogger(TelemetryClient client, string categoryName, Func<string, LogLevel, bool> filter)
@@ -33,6 +33,14 @@ namespace Microsoft.Azure.WebJobs.Logging.ApplicationInsights
         {
             if (!IsEnabled(logLevel))
             {
+                return;
+            }
+
+            if (eventId.Id == 1)
+            {
+                RequestTelemetry request = new RequestTelemetry();
+                request.Start();
+                DictionaryLoggerScope.Current.Add(RequestKey, request);
                 return;
             }
 
@@ -191,7 +199,14 @@ namespace Microsoft.Azure.WebJobs.Logging.ApplicationInsights
         {
             IDictionary<string, object> scopeProps = DictionaryLoggerScope.GetMergedStateDictionary() ?? new Dictionary<string, object>();
 
-            RequestTelemetry requestTelemetry = new RequestTelemetry();
+            RequestTelemetry requestTelemetry = null;
+            if (!scopeProps.TryGetValue(RequestKey, out object startedRequestTelemetry))
+            {
+            }
+
+            requestTelemetry = startedRequestTelemetry as RequestTelemetry;
+            requestTelemetry.Stop();
+
             requestTelemetry.Success = exception == null;
             requestTelemetry.ResponseCode = "0";
 
@@ -263,12 +278,6 @@ namespace Microsoft.Azure.WebJobs.Logging.ApplicationInsights
                         requestTelemetry.Timestamp = startTime;
                         requestTelemetry.Properties.Add(prop.Key, startTime.ToString(DateTimeFormatString));
                         break;
-                    case LoggingKeys.Duration:
-                        if (prop.Value is TimeSpan)
-                        {
-                            requestTelemetry.Duration = (TimeSpan)prop.Value;
-                        }
-                        break;
                     case LoggingKeys.OriginalFormat:
                         // this is the format string; we won't use it here
                         break;
@@ -302,7 +311,7 @@ namespace Microsoft.Azure.WebJobs.Logging.ApplicationInsights
             if (state == null)
             {
                 throw new ArgumentNullException(nameof(state));
-            }
+            }            
 
             return DictionaryLoggerScope.Push(state);
         }

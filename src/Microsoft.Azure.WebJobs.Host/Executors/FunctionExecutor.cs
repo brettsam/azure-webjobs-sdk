@@ -75,6 +75,14 @@ namespace Microsoft.Azure.WebJobs.Host.Executors
 
         public async Task<IDelayedException> TryExecuteAsync(IFunctionInstance functionInstance, CancellationToken cancellationToken)
         {
+            using (_resultsLogger?.BeginFunctionScope(functionInstance))
+            {
+                return await TryExecuteInternalAsync(functionInstance, cancellationToken);
+            }
+        }
+
+        public async Task<IDelayedException> TryExecuteInternalAsync(IFunctionInstance functionInstance, CancellationToken cancellationToken)
+        {
             FunctionStartedMessage functionStartedMessage = CreateStartedMessageWithoutArguments(functionInstance);
             IDictionary<string, ParameterLog> parameterLogCollector = new Dictionary<string, ParameterLog>();
             FunctionCompletedMessage functionCompletedMessage = null;
@@ -92,12 +100,11 @@ namespace Microsoft.Azure.WebJobs.Host.Executors
             };
 
             Stopwatch sw = Stopwatch.StartNew();
+            _resultsLogger.LogFunctionStart();
+
             try
             {
-                using (_logger?.BeginFunctionScope(functionInstance))
-                {
-                    functionStartedMessageId = await ExecuteWithLoggingAsync(functionInstance, functionStartedMessage, fastItem, parameterLogCollector, functionTraceLevel, cancellationToken);
-                }
+                functionStartedMessageId = await ExecuteWithLoggingAsync(functionInstance, functionStartedMessage, fastItem, parameterLogCollector, functionTraceLevel, cancellationToken);
                 functionCompletedMessage = CreateCompletedMessage(functionStartedMessage);
             }
             catch (Exception exception)
@@ -155,10 +162,8 @@ namespace Microsoft.Azure.WebJobs.Host.Executors
                 }
                 await _functionEventCollector.AddAsync(fastItem);
             }
-            using (_resultsLogger?.BeginFunctionScope(functionInstance))
-            {
-                _resultsLogger?.LogFunctionResult(functionInstance.FunctionDescriptor.Method.Name, fastItem, sw.Elapsed, exceptionInfo?.SourceException);
-            }
+
+            _resultsLogger?.LogFunctionResult(functionInstance.FunctionDescriptor.Method.Name, fastItem, exceptionInfo?.SourceException);
 
             if (functionCompletedMessage != null &&
                 ((functionTraceLevel >= TraceLevel.Info) || (functionCompletedMessage.Failure != null && functionTraceLevel >= TraceLevel.Error)))
@@ -234,8 +239,8 @@ namespace Microsoft.Azure.WebJobs.Host.Executors
 
                     // Must bind before logging (bound invoke string is included in log message).
                     FunctionBindingContext functionContext = new FunctionBindingContext(
-                        instance.Id, 
-                        functionCancellationTokenSource.Token, 
+                        instance.Id,
+                        functionCancellationTokenSource.Token,
                         traceWriter,
                         instance.FunctionDescriptor);
                     var valueBindingContext = new ValueBindingContext(functionContext, cancellationToken);

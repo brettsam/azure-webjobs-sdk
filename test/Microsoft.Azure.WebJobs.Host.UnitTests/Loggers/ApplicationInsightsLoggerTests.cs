@@ -65,7 +65,8 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests.Loggers
 
             using (logger.BeginFunctionScope(CreateFunctionInstance(_invocationId)))
             {
-                logger.LogFunctionResult(_functionShortName, result, TimeSpan.FromMilliseconds(durationMs));
+                logger.LogFunctionStart();
+                logger.LogFunctionResult(_functionShortName, result);
             }
 
             RequestTelemetry telemetry = _channel.Telemetries.Single() as RequestTelemetry;
@@ -87,7 +88,8 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests.Loggers
 
             using (logger.BeginFunctionScope(CreateFunctionInstance(_invocationId)))
             {
-                logger.LogFunctionResult(_functionShortName, result, TimeSpan.FromMilliseconds(durationMs), fex);
+                logger.LogFunctionStart();
+                logger.LogFunctionResult(_functionShortName, result, fex);
             }
 
             // Errors log an associated Exception
@@ -162,7 +164,8 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests.Loggers
 
             using (logger.BeginScope(scopeProps))
             {
-                logger.LogFunctionResult(_functionShortName, result, TimeSpan.FromMilliseconds(durationMs));
+                logger.LogFunctionStart();
+                logger.LogFunctionResult(_functionShortName, result);
             }
 
             RequestTelemetry telemetry = _channel.Telemetries.Single() as RequestTelemetry;
@@ -200,7 +203,8 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests.Loggers
 
             using (logger.BeginScope(scopeProps))
             {
-                logger.LogFunctionResult(_functionShortName, result, TimeSpan.FromMilliseconds(durationMs), new Exception("Boom"));
+                logger.LogFunctionStart();
+                logger.LogFunctionResult(_functionShortName, result, new Exception("Boom"));
             }
 
             // one Exception, one Request

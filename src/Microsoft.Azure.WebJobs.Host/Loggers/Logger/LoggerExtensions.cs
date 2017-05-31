@@ -12,8 +12,14 @@ namespace Microsoft.Extensions.Logging
 {
     internal static class LoggerExtensions
     {
+        internal static void LogFunctionStart(this ILogger logger)
+        {
+            // All we need to do is log with the correct event. Details are all filled in upon completion.
+            logger.LogInformation(LogEvents.FunctionStarted, null);
+        }
+
         // We want the short name for use with Application Insights.
-        internal static void LogFunctionResult(this ILogger logger, string shortName, FunctionInstanceLogEntry logEntry, TimeSpan duration, Exception exception = null)
+        internal static void LogFunctionResult(this ILogger logger, string shortName, FunctionInstanceLogEntry logEntry, Exception exception = null)
         {
             bool succeeded = exception == null;
 
@@ -32,7 +38,6 @@ namespace Microsoft.Extensions.Logging
             properties.Add(LoggingKeys.TriggerReason, logEntry.TriggerReason);
             properties.Add(LoggingKeys.StartTime, logEntry.StartTime);
             properties.Add(LoggingKeys.EndTime, logEntry.EndTime);
-            properties.Add(LoggingKeys.Duration, duration);
             properties.Add(LoggingKeys.Succeeded, succeeded);
 
             if (logEntry.Arguments != null)
