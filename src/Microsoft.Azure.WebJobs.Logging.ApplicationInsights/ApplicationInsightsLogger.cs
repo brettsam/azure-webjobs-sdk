@@ -36,14 +36,6 @@ namespace Microsoft.Azure.WebJobs.Logging.ApplicationInsights
                 return;
             }
 
-            if (eventId.Id == 1)
-            {
-                RequestTelemetry request = new RequestTelemetry();
-                request.Start();
-                DictionaryLoggerScope.Current.Add(RequestKey, request);
-                return;
-            }
-
             string formattedMessage = formatter?.Invoke(state, exception);
 
             IEnumerable<KeyValuePair<string, object>> stateValues = state as IEnumerable<KeyValuePair<string, object>>;
@@ -51,6 +43,20 @@ namespace Microsoft.Azure.WebJobs.Logging.ApplicationInsights
             // We only support lists of key-value pairs. Anything else we'll skip.
             if (stateValues == null)
             {
+                return;
+            }
+
+            if (eventId.Id == 1)
+            {
+                var values = DictionaryLoggerScope.GetMergedStateDictionary();
+                string functionName = values[ScopeKeys.FunctionName].ToString();
+                string invocationId = values[ScopeKeys.FunctionInvocationId].ToString();
+
+                RequestTelemetry request = new RequestTelemetry();
+                request.Name = functionName;
+                request.Id = invocationId;
+                request.Start();
+                DictionaryLoggerScope.Current.Add(RequestKey, request);
                 return;
             }
 
@@ -275,7 +281,6 @@ namespace Microsoft.Azure.WebJobs.Logging.ApplicationInsights
                         break;
                     case LoggingKeys.StartTime:
                         DateTimeOffset startTime = new DateTimeOffset((DateTime)prop.Value, TimeSpan.Zero);
-                        requestTelemetry.Timestamp = startTime;
                         requestTelemetry.Properties.Add(prop.Key, startTime.ToString(DateTimeFormatString));
                         break;
                     case LoggingKeys.OriginalFormat:
@@ -311,7 +316,7 @@ namespace Microsoft.Azure.WebJobs.Logging.ApplicationInsights
             if (state == null)
             {
                 throw new ArgumentNullException(nameof(state));
-            }            
+            }
 
             return DictionaryLoggerScope.Push(state);
         }
