@@ -33,6 +33,14 @@ namespace Microsoft.Extensions.Logging
             logger?.Log(LogLevel.Information, LogConstants.MetricEventId, payload, null, (s, e) => null);
         }
 
+        internal static IDisposable BeginLogLevelScope(this ILogger logger, LogLevel level)
+        {            
+            return logger.BeginScope(new Dictionary<string, object>
+            {
+                [LogConstants.LogLevelKey] = level
+            });
+        }
+
         internal static void LogFunctionResult(this ILogger logger, FunctionInstanceLogEntry logEntry)
         {
             bool succeeded = logEntry.Exception == null;
@@ -47,13 +55,15 @@ namespace Microsoft.Extensions.Logging
             };
 
             // generate additional payload that is not in the string
-            IDictionary<string, object> properties = new Dictionary<string, object>();
-            properties.Add(LogConstants.NameKey, logEntry.LogName);
-            properties.Add(LogConstants.TriggerReasonKey, logEntry.TriggerReason);
-            properties.Add(LogConstants.StartTimeKey, logEntry.StartTime);
-            properties.Add(LogConstants.EndTimeKey, logEntry.EndTime);
-            properties.Add(LogConstants.DurationKey, logEntry.Duration);
-            properties.Add(LogConstants.SucceededKey, succeeded);
+            IDictionary<string, object> properties = new Dictionary<string, object>
+            {
+                { LogConstants.NameKey, logEntry.LogName },
+                { LogConstants.TriggerReasonKey, logEntry.TriggerReason },
+                { LogConstants.StartTimeKey, logEntry.StartTime },
+                { LogConstants.EndTimeKey, logEntry.EndTime },
+                { LogConstants.DurationKey, logEntry.Duration },
+                { LogConstants.SucceededKey, succeeded }
+            };
 
             if (logEntry.Arguments != null)
             {

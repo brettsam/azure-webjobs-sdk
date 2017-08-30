@@ -11,6 +11,7 @@ using Microsoft.Azure.WebJobs.Host.Listeners;
 using Microsoft.Azure.WebJobs.Host.Storage;
 using Microsoft.Azure.WebJobs.Host.Storage.Queue;
 using Microsoft.Azure.WebJobs.Host.Timers;
+using Microsoft.Azure.WebJobs.Logging;
 using Microsoft.Extensions.Logging;
 using Microsoft.WindowsAzure.Storage;
 using Microsoft.WindowsAzure.Storage.Queue;
@@ -31,6 +32,7 @@ namespace Microsoft.Azure.WebJobs.Host.Queues.Listeners
         private readonly IQueueConfiguration _queueConfiguration;
         private readonly QueueProcessor _queueProcessor;
         private readonly TimeSpan _visibilityTimeout;
+        private readonly ILogger _logger;
 
         private bool _foundMessageSinceLastDelay;
         private bool _disposed;
@@ -98,6 +100,7 @@ namespace Microsoft.Azure.WebJobs.Host.Queues.Listeners
             }
 
             _delayStrategy = new RandomizedExponentialBackoffStrategy(QueuePollingIntervals.Minimum, maximumInterval);
+            _logger = loggerFactory?.CreateLogger(LogCategories.CreateTriggerCategory("Queue"));
         }
 
         // for testing
@@ -145,62 +148,65 @@ namespace Microsoft.Azure.WebJobs.Host.Queues.Listeners
                 _stopWaitingTaskSource = new TaskCompletionSource<object>();
             }
 
-            IEnumerable<IStorageQueueMessage> batch;
-            try
+            using (_logger.BeginLogLevelScope(Extensions.Logging.LogLevel.Debug))
             {
-                batch = await _queue.GetMessagesAsync(_queueProcessor.BatchSize,
-                    _visibilityTimeout,
-                    options: null,
-                    operationContext: null,
-                    cancellationToken: cancellationToken);
-            }
-            catch (StorageException exception)
-            {
-                if (exception.IsNotFoundQueueNotFound() ||
-                    exception.IsConflictQueueBeingDeletedOrDisabled() ||
-                    exception.IsServerSideError())
+                IEnumerable<IStorageQueueMessage> batch;
+                try
                 {
-                    // Back off when no message is available, or when
-                    // transient errors occur
+                    batch = await _queue.GetMessagesAsync(_queueProcessor.BatchSize,
+                        _visibilityTimeout,
+                        options: null,
+                        operationContext: null,
+                        cancellationToken: cancellationToken);
+                }
+                catch (StorageException exception)
+                {
+                    if (exception.IsNotFoundQueueNotFound() ||
+                        exception.IsConflictQueueBeingDeletedOrDisabled() ||
+                        exception.IsServerSideError())
+                    {
+                        // Back off when no message is available, or when
+                        // transient errors occur
+                        return CreateBackoffResult();
+                    }
+                    else
+                    {
+                        throw;
+                    }
+                }
+
+                if (batch == null)
+                {
                     return CreateBackoffResult();
                 }
-                else
+
+                bool foundMessage = false;
+                foreach (var message in batch)
                 {
-                    throw;
+                    if (message == null)
+                    {
+                        continue;
+                    }
+
+                    foundMessage = true;
+
+                    // Note: Capturing the cancellationToken passed here on a task that continues to run is a slight abuse
+                    // of the cancellation token contract. However, the timer implementation would not dispose of the
+                    // cancellation token source until it has stopped and perhaps also disposed, and we wait for all
+                    // outstanding tasks to complete before stopping the timer.
+                    Task task = ProcessMessageAsync(message, _visibilityTimeout, cancellationToken);
+
+                    // Having both WaitForNewBatchThreshold and this method mutate _processing is safe because the timer
+                    // contract is serial: it only calls ExecuteAsync once the wait expires (and the wait won't expire until
+                    // WaitForNewBatchThreshold has finished mutating _processing).
+                    _processing.Add(task);
                 }
-            }
 
-            if (batch == null)
-            {
-                return CreateBackoffResult();
-            }
-
-            bool foundMessage = false;
-            foreach (var message in batch)
-            {
-                if (message == null)
+                // Back off when no message was found.
+                if (!foundMessage)
                 {
-                    continue;
+                    return CreateBackoffResult();
                 }
-
-                foundMessage = true;
-
-                // Note: Capturing the cancellationToken passed here on a task that continues to run is a slight abuse
-                // of the cancellation token contract. However, the timer implementation would not dispose of the
-                // cancellation token source until it has stopped and perhaps also disposed, and we wait for all
-                // outstanding tasks to complete before stopping the timer.
-                Task task = ProcessMessageAsync(message, _visibilityTimeout, cancellationToken);
-
-                // Having both WaitForNewBatchThreshold and this method mutate _processing is safe because the timer
-                // contract is serial: it only calls ExecuteAsync once the wait expires (and the wait won't expire until
-                // WaitForNewBatchThreshold has finished mutating _processing).
-                _processing.Add(task);
-            }
-
-            // Back off when no message was found.
-            if (!foundMessage)
-            {
-                return CreateBackoffResult();
             }
 
             _foundMessageSinceLastDelay = true;

@@ -30,7 +30,7 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests.Bindings.Data
             // Assert
             Assert.NotNull(binding);
 
-            var functionBindingContext = new FunctionBindingContext(Guid.NewGuid(), CancellationToken.None, null);
+            var functionBindingContext = new FunctionBindingContext(Guid.NewGuid(), CancellationToken.None, null, null);
             var valueBindingContext = new ValueBindingContext(functionBindingContext, CancellationToken.None);
             var bindingData = new Dictionary<string, object>
             {
@@ -64,7 +64,7 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests.Bindings.Data
             // Assert
             Assert.NotNull(binding);
 
-            var functionBindingContext = new FunctionBindingContext(Guid.NewGuid(), CancellationToken.None, null);
+            var functionBindingContext = new FunctionBindingContext(Guid.NewGuid(), CancellationToken.None, null, null);
             var valueBindingContext = new ValueBindingContext(functionBindingContext, CancellationToken.None);
             var bindingData = new Dictionary<string, object>
             {
@@ -98,7 +98,7 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests.Bindings.Data
             // Assert
             Assert.NotNull(binding);
 
-            var functionBindingContext = new FunctionBindingContext(Guid.NewGuid(), CancellationToken.None, null);
+            var functionBindingContext = new FunctionBindingContext(Guid.NewGuid(), CancellationToken.None, null, null);
             var valueBindingContext = new ValueBindingContext(functionBindingContext, CancellationToken.None);
             var bindingData = new Dictionary<string, object>
             {

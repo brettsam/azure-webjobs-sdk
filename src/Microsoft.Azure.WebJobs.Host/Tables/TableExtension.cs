@@ -13,6 +13,7 @@ using Microsoft.Azure.WebJobs.Host.Executors;
 using Microsoft.Azure.WebJobs.Host.Protocols;
 using Microsoft.Azure.WebJobs.Host.Storage;
 using Microsoft.Azure.WebJobs.Host.Storage.Table;
+using Microsoft.Extensions.Logging;
 using Microsoft.WindowsAzure.Storage.Table;
 using Newtonsoft.Json.Linq;
 
@@ -57,9 +58,9 @@ namespace Microsoft.Azure.WebJobs.Host.Tables
                     .SetPostResolveHook(ToParameterDescriptorForCollector)
                     .BindToInput<IStorageTable>(builder);
 
-            binding.BindToCollector<ITableEntity>(BuildFromTableAttribute); 
+            binding.BindToCollector<ITableEntity>(BuildFromTableAttribute);
 
-            binding.WhenIsNotNull(PartitionKeyProperty).WhenIsNotNull(RowKeyProperty)            
+            binding.WhenIsNotNull(PartitionKeyProperty).WhenIsNotNull(RowKeyProperty)
                 .BindToInput<JObject>(builder);
             binding.BindToInput<JArray>(builder);
             binding.Bind(original);
@@ -198,8 +199,34 @@ namespace Microsoft.Azure.WebJobs.Host.Tables
                     return EntityProperty.GeneratePropertyForGuid((Guid)property.Value);
                 case JTokenType.Float:
                     return EntityProperty.GeneratePropertyForDouble((double)property.Value);
+                case JTokenType.Date:
+                    return EntityProperty.GeneratePropertyForDateTimeOffset((DateTimeOffset)property.Value);
                 default:
                     return EntityProperty.CreateEntityPropertyFromObject((object)property.Value);
+            }
+        }
+
+        private class LoggerWrapper<T> : ILogger<T>
+        {
+            private ILogger _inner;
+            public LoggerWrapper(ILogger inner)
+            {
+                _inner = inner;
+            }
+
+            public IDisposable BeginScope<TState>(TState state)
+            {
+                return _inner.BeginScope(state);
+            }
+
+            public bool IsEnabled(LogLevel logLevel)
+            {
+                return _inner.IsEnabled(logLevel);
+            }
+
+            public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception exception, Func<TState, Exception, string> formatter)
+            {
+                _inner.Log(logLevel, eventId, state, exception, formatter);
             }
         }
 

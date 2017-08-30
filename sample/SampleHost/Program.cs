@@ -35,14 +35,15 @@ namespace SampleHost
             if (!string.IsNullOrEmpty(instrumentationKey))
             {
                 var filter = new LogCategoryFilter();
-                filter.DefaultLevel = LogLevel.Debug;
-                filter.CategoryLevels[LogCategories.Function] = LogLevel.Debug;
-                filter.CategoryLevels[LogCategories.Results] = LogLevel.Debug;
-                filter.CategoryLevels[LogCategories.Aggregator] = LogLevel.Debug;
+                filter.DefaultLevel = LogLevel.Information;
+                filter.CategoryLevels[LogCategories.CreateTriggerCategory("Queue")] = LogLevel.Debug;
+                filter.CategoryLevels["Host.Bindings"] = LogLevel.Debug;
 
                 config.LoggerFactory = new LoggerFactory()
                     .AddApplicationInsights(instrumentationKey, filter.Filter)
                     .AddConsole(filter.Filter);
+
+                config.Tracing.ConsoleLevel = System.Diagnostics.TraceLevel.Off;
             }
         }
     }

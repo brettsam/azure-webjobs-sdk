@@ -28,6 +28,7 @@ namespace Microsoft.Azure.WebJobs.Host.Executors
         private readonly IWebJobsExceptionHandler _exceptionHandler;
         private readonly TraceWriter _trace;
         private readonly IAsyncCollector<FunctionInstanceLogEntry> _functionEventCollector;
+        private readonly ILoggerFactory _loggerFactory;
         private readonly ILogger _logger;
         private readonly ILogger _resultsLogger;
         private readonly IEnumerable<IFunctionFilter> _globalFunctionFilters;
@@ -65,6 +66,7 @@ namespace Microsoft.Azure.WebJobs.Host.Executors
             _exceptionHandler = exceptionHandler;
             _trace = trace;
             _functionEventCollector = functionEventCollector;
+            _loggerFactory = loggerFactory;
             _logger = loggerFactory?.CreateLogger(LogCategories.Executor);
             _resultsLogger = loggerFactory?.CreateLogger(LogCategories.Results);
             _globalFunctionFilters = globalFunctionFilters ?? Enumerable.Empty<IFunctionFilter>();
@@ -239,6 +241,7 @@ namespace Microsoft.Azure.WebJobs.Host.Executors
                         instance.Id,
                         functionCancellationTokenSource.Token,
                         traceWriter,
+                        _loggerFactory,
                         instance.FunctionDescriptor);
                     var valueBindingContext = new ValueBindingContext(functionContext, cancellationToken);
                     await parameterHelper.BindAsync(instance.BindingSource, valueBindingContext);
@@ -635,7 +638,7 @@ namespace Microsoft.Azure.WebJobs.Host.Executors
         /// <param name="instance">The function instance. Used only in the exceptionMessage</param>
         /// <param name="onTimeout">A callback to be executed if a timeout occurs.</param>
         /// <returns>True if a timeout occurred. Otherwise, false.</returns>
-        private static async Task<bool> TryHandleTimeoutAsync(Task invokeTask, 
+        private static async Task<bool> TryHandleTimeoutAsync(Task invokeTask,
             CancellationToken shutdownToken, bool throwOnTimeout, CancellationToken timeoutToken,
             TimeSpan timeoutInterval, IFunctionInstance instance, Action onTimeout)
         {
@@ -804,7 +807,7 @@ namespace Microsoft.Azure.WebJobs.Host.Executors
             // ordered parameter names of the underlying physical MethodInfo that will be invoked. 
             // This litererally matches the ParameterInfo[] and does not include return value. 
             private IReadOnlyList<string> _parameterNames;
-            
+
             // state bag passed to all function filters
             private IDictionary<string, object> _filterContextProperties = new Dictionary<string, object>();
 
@@ -1056,7 +1059,7 @@ namespace Microsoft.Azure.WebJobs.Host.Executors
             {
                 _returnValue = returnValue;
             }
-           
+
             public void Dispose()
             {
                 if (!_disposed)

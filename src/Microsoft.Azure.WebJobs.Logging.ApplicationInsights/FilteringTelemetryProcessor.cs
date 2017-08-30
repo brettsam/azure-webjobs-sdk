@@ -2,6 +2,7 @@
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
 using System;
+using System.Diagnostics;
 using Microsoft.ApplicationInsights.Channel;
 using Microsoft.ApplicationInsights.DataContracts;
 using Microsoft.ApplicationInsights.Extensibility;
@@ -24,20 +25,24 @@ namespace Microsoft.Azure.WebJobs.Logging.ApplicationInsights
         {
             if (IsEnabled(item))
             {
+                Debug.WriteLine($"Logging {item?.GetType()?.Name}: {item?.Context?.Operation?.Name}");
                 _next.Process(item);
             }
         }
 
         private bool IsEnabled(ITelemetry item)
         {
-            bool enabled = true;
+            bool isDependency = item is DependencyTelemetry;
 
-            ISupportProperties telemetry = item as ISupportProperties;
+            // We default to false if this is a Dependency; We only want Dependencies
+            // with proper LogLevel attached to flow through.
+            bool enabled = !isDependency;
 
-            if (telemetry != null && _filter != null)
+            ISupportProperties properties = item as ISupportProperties;
+            if (properties != null && _filter != null)
             {
                 string categoryName = null;
-                if (!telemetry.Properties.TryGetValue(LogConstants.CategoryNameKey, out categoryName))
+                if (!properties.Properties.TryGetValue(LogConstants.CategoryNameKey, out categoryName))
                 {
                     // If no category is specified, it will be filtered by the default filter
                     categoryName = string.Empty;
@@ -46,7 +51,7 @@ namespace Microsoft.Azure.WebJobs.Logging.ApplicationInsights
                 // Extract the log level and apply the filter
                 string logLevelString = null;
                 LogLevel logLevel;
-                if (telemetry.Properties.TryGetValue(LogConstants.LogLevelKey, out logLevelString) &&
+                if (properties.Properties.TryGetValue(LogConstants.LogLevelKey, out logLevelString) &&
                     Enum.TryParse(logLevelString, out logLevel))
                 {
                     enabled = _filter(categoryName, logLevel);

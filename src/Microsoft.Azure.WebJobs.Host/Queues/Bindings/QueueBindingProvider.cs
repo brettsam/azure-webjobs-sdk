@@ -20,7 +20,7 @@ namespace Microsoft.Azure.WebJobs.Host.Queues.Bindings
     // Write up bindinging rules for [Queue] attribute. 
     // This is fundemantentally an IAsyncCollector<IStorageQueueMessage>
     internal class QueueExtension : IExtensionConfigProvider
-    {      
+    {
         public QueueExtension()
         {
         }
@@ -47,7 +47,7 @@ namespace Microsoft.Azure.WebJobs.Host.Queues.Bindings
             // Optimization where a queue output can directly trigger a queue input. 
             // This is per-host (not per-config)
             private ContextAccessor<IMessageEnqueuedWatcher> _messageEnqueuedWatcherGetter;
-            
+
             public void Initialize(ExtensionConfigContext context)
             {
                 _messageEnqueuedWatcherGetter = context.PerHostServices.GetService<ContextAccessor<IMessageEnqueuedWatcher>>();
@@ -197,8 +197,8 @@ namespace Microsoft.Azure.WebJobs.Host.Queues.Bindings
             }
         }
 
-        private class QueueBuilder : 
-            IAsyncConverter<QueueAttribute, IStorageQueue>, 
+        private class QueueBuilder :
+            IAsyncConverter<QueueAttribute, IStorageQueue>,
             IAsyncConverter<QueueAttribute, CloudQueue>
         {
             private readonly PerHostConfig _bindingProvider;
@@ -235,8 +235,8 @@ namespace Microsoft.Azure.WebJobs.Host.Queues.Bindings
 
             public QueueAsyncCollector(IStorageQueue queue, IMessageEnqueuedWatcher messageEnqueuedWatcher)
             {
-                this._queue = queue;
-                this._messageEnqueuedWatcher = messageEnqueuedWatcher;
+                _queue = queue;
+                _messageEnqueuedWatcher = messageEnqueuedWatcher;
             }
 
             public async Task AddAsync(IStorageQueueMessage message, CancellationToken cancellationToken = default(CancellationToken))

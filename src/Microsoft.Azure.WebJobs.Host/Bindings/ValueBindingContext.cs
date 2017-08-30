@@ -3,6 +3,7 @@
 
 using System;
 using System.Threading;
+using Microsoft.Extensions.Logging;
 
 namespace Microsoft.Azure.WebJobs.Host.Bindings
 {
@@ -55,6 +56,14 @@ namespace Microsoft.Azure.WebJobs.Host.Bindings
         public TraceWriter Trace
         {
             get { return _functionContext.Trace; }
+        }
+
+        /// <summary>
+        /// Gets the <see cref="ILoggerFactory"/>.
+        /// </summary>
+        public ILoggerFactory LoggerFactory
+        {
+            get { return _functionContext.LoggerFactory; }
         }
 
         /// <summary>

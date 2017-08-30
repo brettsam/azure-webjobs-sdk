@@ -5,6 +5,7 @@ using System;
 using System.Reflection;
 using Microsoft.ApplicationInsights;
 using Microsoft.ApplicationInsights.Channel;
+using Microsoft.ApplicationInsights.DependencyCollector;
 using Microsoft.ApplicationInsights.Extensibility;
 using Microsoft.ApplicationInsights.Extensibility.Implementation;
 using Microsoft.ApplicationInsights.Extensibility.PerfCounterCollector;
@@ -41,6 +42,8 @@ namespace Microsoft.Azure.WebJobs.Logging.ApplicationInsights
             _instrumentationKey = instrumentationKey;
             _samplingSettings = samplingSettings;
             _filter = filter;
+
+            TelemetryDebugWriter.IsTracingDisabled = true;
         }
 
         /// <summary>
@@ -105,6 +108,15 @@ namespace Microsoft.Azure.WebJobs.Logging.ApplicationInsights
             _perfModule = new PerformanceCollectorModule();
             _perfModule.Initialize(config);
 
+            var dependencyModule = new DependencyTrackingTelemetryModule();
+            dependencyModule.DisableDiagnosticSourceInstrumentation = true;
+            var domains = dependencyModule.ExcludeComponentCorrelationHttpHeadersOnDomains;
+            domains.Add("core.windows.net");
+            domains.Add("core.chinacloudapi.cn");
+            domains.Add("core.cloudapi.de");
+            domains.Add("core.usgovcloudapi.net");
+            dependencyModule.Initialize(config);
+
             // Configure the TelemetryChannel
             ITelemetryChannel channel = CreateTelemetryChannel();
 
@@ -142,6 +154,8 @@ namespace Microsoft.Azure.WebJobs.Logging.ApplicationInsights
 
         internal static void AddInitializers(TelemetryConfiguration config)
         {
+            config.TelemetryInitializers.Add(new HttpDependenciesParsingTelemetryInitializer());
+
             // This picks up the RoleName from the server
             config.TelemetryInitializers.Add(new AzureWebAppRoleEnvironmentTelemetryInitializer());
 

@@ -386,7 +386,13 @@ namespace Microsoft.Azure.WebJobs.Logging.ApplicationInsights
                 throw new ArgumentNullException(nameof(state));
             }
 
-            StartTelemetryIfFunctionInvocation(state as IDictionary<string, object>);
+            if (state is IDictionary<string, object> stateDict)
+            {
+                StartTelemetryIfFunctionInvocation(stateDict);
+
+                // Automatically attach the Category for others to use downstream
+                stateDict[LogConstants.CategoryNameKey] = _categoryName;
+            }
 
             return DictionaryLoggerScope.Push(state);
         }

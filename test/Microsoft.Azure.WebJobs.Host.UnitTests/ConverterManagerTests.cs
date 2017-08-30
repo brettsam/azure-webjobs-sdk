@@ -92,7 +92,7 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests
             var cm = new ConverterManager(); // empty 
 
             Guid instance = Guid.NewGuid();
-            var testContext = new ValueBindingContext(new FunctionBindingContext(instance, CancellationToken.None, null), CancellationToken.None);
+            var testContext = new ValueBindingContext(new FunctionBindingContext(instance, CancellationToken.None, null, null), CancellationToken.None);
 
             cm.AddConverter((object obj, Attribute attr, ValueBindingContext ctx) => {
                 Assert.Same(ctx, testContext);

@@ -32,6 +32,12 @@ namespace Microsoft.Azure.WebJobs.Logging.ApplicationInsights
                 telemetry.Context.Location.Ip = LoggingConstants.ZeroIpAddress;
             }
 
+            if (telemetry is DependencyTelemetry dependency && dependency.Properties.ContainsKey(LogConstants.CategoryNameKey))
+            {
+                SanitizeDependency(dependency);
+                return;
+            }
+
             // Apply our special scope properties
             IDictionary<string, object> scopeProps = DictionaryLoggerScope.GetMergedStateDictionary() ?? new Dictionary<string, object>();
 
@@ -53,6 +59,23 @@ namespace Microsoft.Azure.WebJobs.Logging.ApplicationInsights
                 {
                     telemetryProps.Properties[LogConstants.LogLevelKey] = logLevel.Value.ToString();
                 }
+            }
+        }
+
+        private static void SanitizeDependency(DependencyTelemetry dependency)
+        {
+            if (dependency == null)
+            {
+                return;
+            }
+
+            // We poll 'azure-webjobs-host-{id}' queues looking for shutdown calls, but it may
+            // not exist. We don't want this to look like an error.
+            if (dependency.Type == "Azure queue" &&
+                dependency.Name.Contains("azure-webjobs-host-") &&
+                dependency.ResultCode == "404")
+            {
+                dependency.Success = true;
             }
         }
 

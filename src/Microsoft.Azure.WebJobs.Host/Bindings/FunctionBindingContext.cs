@@ -4,6 +4,7 @@
 using System;
 using System.Threading;
 using Microsoft.Azure.WebJobs.Host.Protocols;
+using Microsoft.Extensions.Logging;
 
 namespace Microsoft.Azure.WebJobs.Host.Bindings
 {
@@ -16,6 +17,7 @@ namespace Microsoft.Azure.WebJobs.Host.Bindings
         private readonly Guid _functionInstanceId;
         private readonly CancellationToken _functionCancellationToken;
         private readonly TraceWriter _trace;
+        private readonly ILoggerFactory _loggerFactory;
 
         /// <summary>
         /// Creates a new instance.
@@ -23,16 +25,19 @@ namespace Microsoft.Azure.WebJobs.Host.Bindings
         /// <param name="functionInstanceId">The instance ID of the function being bound to.</param>
         /// <param name="functionCancellationToken">The <see cref="CancellationToken"/> to use.</param>
         /// <param name="trace">The trace writer.</param>
+        /// <param name="loggerFactory">The LoggerFactory</param>
         /// <param name="functionDescriptor">Current function being executed. </param>
         public FunctionBindingContext(
-            Guid functionInstanceId, 
-            CancellationToken functionCancellationToken, 
+            Guid functionInstanceId,
+            CancellationToken functionCancellationToken,
             TraceWriter trace,
+            ILoggerFactory loggerFactory,
             FunctionDescriptor functionDescriptor = null)
         {
             _functionInstanceId = functionInstanceId;
             _functionCancellationToken = functionCancellationToken;
             _trace = trace;
+            _loggerFactory = loggerFactory;
 
             this.MethodName = functionDescriptor?.LogName;
         }
@@ -59,6 +64,14 @@ namespace Microsoft.Azure.WebJobs.Host.Bindings
         public TraceWriter Trace
         {
             get { return _trace; }
+        }
+
+        /// <summary>
+        /// Gets the <see cref="ILoggerFactory"/>.
+        /// </summary>
+        public ILoggerFactory LoggerFactory
+        {
+            get { return _loggerFactory; }
         }
 
         /// <summary>

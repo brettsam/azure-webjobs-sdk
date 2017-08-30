@@ -4,6 +4,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 
 namespace Microsoft.Azure.WebJobs.Host.Bindings
 {
@@ -11,16 +12,19 @@ namespace Microsoft.Azure.WebJobs.Host.Bindings
     internal class TypedAsyncCollectorAdapter<TSrc, TDest, TAttribute> : IAsyncCollector<TSrc>
         where TAttribute : Attribute
     {
+        private const string CategoryPrefix = "Host.Bindings";
         private readonly IAsyncCollector<TDest> _inner;
         private readonly FuncConverter<TSrc, TAttribute, TDest> _convert;
         private readonly TAttribute _attrResolved;
         private readonly ValueBindingContext _context;
+        private readonly ILogger _logger;
 
         public TypedAsyncCollectorAdapter(
             IAsyncCollector<TDest> inner,
-            FuncConverter<TSrc, TAttribute, TDest> convert, 
+            FuncConverter<TSrc, TAttribute, TDest> convert,
             TAttribute attrResolved,
-            ValueBindingContext context)
+            ValueBindingContext context,
+            ILoggerFactory loggerFactory)
         {
             if (convert == null)
             {
@@ -31,17 +35,38 @@ namespace Microsoft.Azure.WebJobs.Host.Bindings
             _convert = convert;
             _attrResolved = attrResolved;
             _context = context;
+
+            _logger = loggerFactory.CreateLogger(GetCategoryName());
         }
 
-        public Task AddAsync(TSrc item, CancellationToken cancellationToken = default(CancellationToken))
+        private static string GetCategoryName()
+        {
+            string bindingName = typeof(TAttribute).Name;
+            string attributeString = nameof(Attribute);
+            if (bindingName.EndsWith(attributeString, StringComparison.Ordinal))
+            {
+                int index = bindingName.LastIndexOf(attributeString, StringComparison.Ordinal);
+                bindingName = bindingName.Remove(index);
+            }
+
+            return $"{CategoryPrefix}.{bindingName}";
+        }
+
+        public async Task AddAsync(TSrc item, CancellationToken cancellationToken = default(CancellationToken))
         {
             TDest x = _convert(item, _attrResolved, _context);
-            return _inner.AddAsync(x, cancellationToken);
+            using (_logger.BeginLogLevelScope(LogLevel.Debug))
+            {
+                await _inner.AddAsync(x, cancellationToken);
+            }
         }
 
-        public Task FlushAsync(CancellationToken cancellationToken)
+        public async Task FlushAsync(CancellationToken cancellationToken)
         {
-            return _inner.FlushAsync(cancellationToken);
-        }        
+            using (_logger.BeginLogLevelScope(LogLevel.Debug))
+            {
+                await _inner.FlushAsync(cancellationToken);
+            }
+        }
     }
 }

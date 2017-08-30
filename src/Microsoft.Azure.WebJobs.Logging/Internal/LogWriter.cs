@@ -32,7 +32,7 @@ namespace Microsoft.Azure.WebJobs.Logging
         // MachineName is the name of this machine. 
         // _uniqueId discerns between multiple loggers on the same machine. This ensures multiple writers don't conflict with each other. 
         private readonly string _hostName;
-        private readonly string _machineName; // compute container (not Blob Container) that we're logging for. 
+        private readonly string _machineName; // compute container (not Blob Container) that we're logging for.         
         private string _uniqueId = Guid.NewGuid().ToString();
 
         // If there's a new function, then write it's definition. 
