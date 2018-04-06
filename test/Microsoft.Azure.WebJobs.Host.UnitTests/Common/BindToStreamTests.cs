@@ -27,7 +27,7 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests.Common
         // Each of the TestConfigs below implement this. 
         interface ITest<TConfig>
         {
-            void Test(TestJobHost<TConfig> host);
+            void Test(JobHost<TConfig> host);
         }
 
         [Binding]
@@ -73,7 +73,7 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests.Common
                     BindToStream(this, FileAccess.ReadWrite);
             }
 
-            public void Test(TestJobHost<ConfigNullOutParam> host)
+            public void Test(JobHost<ConfigNullOutParam> host)
             {
                 host.Call("WriteString");
                 // Convert was never called 
@@ -111,7 +111,7 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests.Common
                     BindToStream(this, FileAccess.ReadWrite);
             }
 
-            public void Test(TestJobHost<ConfigAutoResolve> host)
+            public void Test(JobHost<ConfigAutoResolve> host)
             {
                 host.Call("Read", new { x = 456 });
                 // Convert was never called 
@@ -175,7 +175,7 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests.Common
                  });
             }
 
-            public void Test(TestJobHost<ConfigCustom> host)
+            public void Test(JobHost<ConfigCustom> host)
             {
                 host.Call("Read");
                 Assert.Equal(_log, ReadTag);
@@ -235,7 +235,7 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests.Common
                     BindToStream(this, FileAccess.ReadWrite);
             }
 
-            public void Test(TestJobHost<ConfigNotExist> host)
+            public void Test(JobHost<ConfigNotExist> host)
             {
                 host.Call("Read1");
                 Assert.Null(_log);
@@ -301,7 +301,7 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests.Common
                     BindToStream(this, FileAccess.ReadWrite);
             }
 
-            public void Test(TestJobHost<ConfigStream> host)
+            public void Test(JobHost<ConfigStream> host)
             {
                 foreach (var funcName in new string[]
                 {

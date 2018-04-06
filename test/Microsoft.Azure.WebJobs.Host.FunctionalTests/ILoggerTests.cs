@@ -37,15 +37,15 @@ namespace Microsoft.Azure.WebJobs.Host.FunctionalTests
             var functionLogger = _loggerProvider.CreatedLoggers.Where(l => l.Category == LogCategories.CreateFunctionUserCategory(functionName)).Single();
             var resultsLogger = _loggerProvider.CreatedLoggers.Where(l => l.Category == LogCategories.Results).Single();
 
-            Assert.Equal(2, functionLogger.LogMessages.Count);
-            var infoMessage = functionLogger.LogMessages[0];
-            var errorMessage = functionLogger.LogMessages[1];
+            Assert.Equal(2, functionLogger.GetLogMessages().Count);
+            var infoMessage = functionLogger.GetLogMessages()[0];
+            var errorMessage = functionLogger.GetLogMessages()[1];
 
             // These get the {OriginalFormat} property as well as the 2 from structured log properties
             Assert.Equal(3, infoMessage.State.Count());
             Assert.Equal(3, errorMessage.State.Count());
 
-            Assert.Equal(1, resultsLogger.LogMessages.Count);
+            Assert.Equal(1, resultsLogger.GetLogMessages().Count);
 
             // TODO: beef these verifications up
         }
@@ -63,9 +63,9 @@ namespace Microsoft.Azure.WebJobs.Host.FunctionalTests
             // Five loggers are the startup, singleton, results, function and function.user
             Assert.Equal(5, _loggerProvider.CreatedLoggers.Count);
             var functionLogger = _loggerProvider.CreatedLoggers.Where(l => l.Category == LogCategories.CreateFunctionUserCategory(functionName)).Single();
-            Assert.Equal(2, functionLogger.LogMessages.Count);
-            var infoMessage = functionLogger.LogMessages[0];
-            var errorMessage = functionLogger.LogMessages[1];
+            Assert.Equal(2, functionLogger.GetLogMessages().Count);
+            var infoMessage = functionLogger.GetLogMessages()[0];
+            var errorMessage = functionLogger.GetLogMessages()[1];
 
             // These get the {OriginalFormat} only
             Assert.Single(infoMessage.State);

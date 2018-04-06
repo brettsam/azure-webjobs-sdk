@@ -73,8 +73,8 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests
                 // TODO: DI:
                 Assert.False(true, "Remove once DI fixes are in place");
                 IConverterManager cm = null;// context.Config.ConverterManager;
-                var triggerBindingProvider = new FakeQueueTriggerBindingProvider(new FakeQueueClient(), cm);
-                context.AddBindingRule<FakeQueueTriggerAttribute>().BindToTrigger(triggerBindingProvider);
+                //var triggerBindingProvider = new FakeQueueTriggerBindingProvider(new FakeQueueClient(), cm);
+                //context.AddBindingRule<FakeQueueTriggerAttribute>().BindToTrigger(triggerBindingProvider);
             }
 
             public string Convert(TestAttribute attr)

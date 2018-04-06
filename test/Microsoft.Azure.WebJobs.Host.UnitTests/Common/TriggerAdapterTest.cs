@@ -6,18 +6,14 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using Microsoft.Azure.WebJobs.Host.Bindings;
 using Microsoft.Azure.WebJobs.Host.Config;
+using Microsoft.Azure.WebJobs.Host.Executors;
 using Microsoft.Azure.WebJobs.Host.Listeners;
 using Microsoft.Azure.WebJobs.Host.Protocols;
 using Microsoft.Azure.WebJobs.Host.TestCommon;
 using Microsoft.Azure.WebJobs.Host.Triggers;
 using Microsoft.Extensions.Options;
-using System;
-using System.Collections.Generic;
-using System.Text;
-using System.Threading.Tasks;
-using Xunit;
-using Microsoft.Azure.WebJobs.Host.Executors;
 using Moq;
+using Xunit;
 
 namespace Microsoft.Azure.WebJobs.Host.UnitTests.Common
 {
@@ -112,7 +108,7 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests.Common
         [Fact]
         public async Task TestNoStringTriggerAdapter()
         {
-            var queueClient = new FakeQueueClient();
+            FakeQueueClient queueClient = null; // new FakeQueueClient();
             var config = TestHelpers.NewConfig<ProgNoString>(new ExtNoStringConverter(), queueClient);
             var host = new JobHost(new OptionsWrapper<JobHostOptions>(config), new Mock<IJobHostContextFactory>().Object);
 
@@ -126,7 +122,7 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests.Common
         [Fact]
         public async Task TestTriggerAdapter()
         {
-            var queueClient = new FakeQueueClient();
+            FakeQueueClient queueClient = null; // new FakeQueueClient();
             var config = TestHelpers.NewConfig<Prog>(new Ext(), queueClient);
             var host = new JobHost(new OptionsWrapper<JobHostOptions>(config), new Mock<IJobHostContextFactory>().Object);
 

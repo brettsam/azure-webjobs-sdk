@@ -10,7 +10,6 @@ using System.Reflection;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.Azure.WebJobs.Host.Bindings;
 using Microsoft.Azure.WebJobs.Host.Blobs.Bindings;
 using Microsoft.Azure.WebJobs.Host.Blobs.Triggers;
 using Microsoft.Azure.WebJobs.Host.Config;
@@ -19,7 +18,6 @@ using Microsoft.Azure.WebJobs.Host.Indexers;
 using Microsoft.Azure.WebJobs.Host.Listeners;
 using Microsoft.Azure.WebJobs.Host.Loggers;
 using Microsoft.Azure.WebJobs.Host.Protocols;
-using Microsoft.Azure.WebJobs.Host.Queues;
 using Microsoft.Azure.WebJobs.Host.Queues.Bindings;
 using Microsoft.Azure.WebJobs.Host.Queues.Listeners;
 using Microsoft.Azure.WebJobs.Host.Storage;
@@ -29,9 +27,9 @@ using Microsoft.Azure.WebJobs.Host.Tables;
 using Microsoft.Azure.WebJobs.Host.Timers;
 using Microsoft.Azure.WebJobs.Host.Triggers;
 using Microsoft.Azure.WebJobs.Logging;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Microsoft.Extensions.DependencyInjection;
 
 
 namespace Microsoft.Azure.WebJobs.Host.Executors
@@ -293,6 +291,12 @@ namespace Microsoft.Azure.WebJobs.Host.Executors
 
         private void InvokeExtensionConfigProviders(ExtensionConfigContext context)
         {
+            // TODO: Remove IExtensionRegistrty?
+            foreach (var extension in _serviceProvider.GetServices<IExtensionConfigProvider>())
+            {
+                _extensions.RegisterExtension<IExtensionConfigProvider>(extension);
+            }
+
             IEnumerable<IExtensionConfigProvider> configProviders = _extensions.GetExtensions(typeof(IExtensionConfigProvider)).Cast<IExtensionConfigProvider>();
             foreach (IExtensionConfigProvider configProvider in configProviders)
             {

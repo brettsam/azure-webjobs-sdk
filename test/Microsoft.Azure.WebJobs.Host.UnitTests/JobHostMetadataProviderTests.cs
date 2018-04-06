@@ -37,7 +37,7 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests
             // TODO: FACAVAL - We need to consider whether extensions should be registered through config
             //config.AddExtension(ext);
 
-            var host = new TestJobHost<MyProg>(new OptionsWrapper<JobHostOptions>(config), new Mock<IJobHostContextFactory>().Object);
+            var host = new JobHost<MyProg>(new OptionsWrapper<JobHostOptions>(config), new Mock<IJobHostContextFactory>().Object);
             IJobHostMetadataProvider metadataProvider = host.CreateMetadataProvider();
             Assert.Equal(1, ext._counter);
 

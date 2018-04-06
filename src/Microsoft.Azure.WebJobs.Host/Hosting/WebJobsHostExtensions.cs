@@ -2,7 +2,9 @@
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
 using System;
+using Microsoft.Azure.WebJobs.Host.Config;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 
 namespace Microsoft.Azure.WebJobs.Hosting
@@ -23,6 +25,27 @@ namespace Microsoft.Azure.WebJobs.Hosting
                 services.AddWebJobs(configure);
 
                 services.AddSingleton<IHostedService, JobHostService>();
+            });
+
+            return builder;
+        }
+
+        public static IHostBuilder AddExtension<TExtension>(this IHostBuilder builder)
+            where TExtension : class, IExtensionConfigProvider
+        {
+            builder.ConfigureServices(services =>
+            {
+                services.TryAddEnumerable(ServiceDescriptor.Singleton<IExtensionConfigProvider, TExtension>());
+            });
+
+            return builder;
+        }
+
+        public static IHostBuilder AddExtension(this IHostBuilder builder, IExtensionConfigProvider instance)
+        {
+            builder.ConfigureServices(services =>
+            {
+                services.TryAddEnumerable(ServiceDescriptor.Singleton<IExtensionConfigProvider>(instance));
             });
 
             return builder;

@@ -16,6 +16,9 @@ using Microsoft.Azure.WebJobs.Host.Listeners;
 using Microsoft.Azure.WebJobs.Host.Storage;
 using Microsoft.Azure.WebJobs.Host.TestCommon;
 using Microsoft.Azure.WebJobs.Host.Timers;
+using Microsoft.Azure.WebJobs.Hosting;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.WindowsAzure.Storage;
@@ -452,52 +455,58 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests
 
         [Fact]
         [Trait("Category", "secretsrequired")]
-        public void IndexingExceptions_CanBeHandledByLogger()
+        public async Task IndexingExceptions_CanBeHandledByLogger()
         {
-            var config = new JobHostOptions();
-
-            // TODO: DI WORK
-            // Fix this
-            // config.TypeLocator = new FakeTypeLocator(typeof(BindingErrorsProgram));
             FunctionErrorLogger errorLogger = new FunctionErrorLogger("TestCategory");
-
-            // TODO: DI WORK - Make sure services are available
-            //config.AddService<IWebJobsExceptionHandler>(new TestExceptionHandler());
 
             Mock<ILoggerProvider> mockProvider = new Mock<ILoggerProvider>(MockBehavior.Strict);
             mockProvider
                 .Setup(m => m.CreateLogger(It.IsAny<string>()))
                 .Returns(errorLogger);
 
-            ILoggerFactory factory = new LoggerFactory();
-            factory.AddProvider(mockProvider.Object);
+            var builder = new HostBuilder()
+                .UseEnvironment("Development")
+                .ConfigureWebJobsHost()
+                .ConfigureLogging(logging =>
+                {
+                    logging.ClearProviders();
+                    logging.AddProvider(mockProvider.Object);
+                })
+                .ConfigureServices(services =>
+                {
+                    services.AddSingleton<ITypeLocator>(new FakeTypeLocator(typeof(BindingErrorsProgram)));
+                    services.AddSingleton<IWebJobsExceptionHandler, TestExceptionHandler>();
+                    services.AddSingleton<IHostIdProvider, FixedHostIdProvider>();
+                });
 
-            JobHost host = new JobHost(new OptionsWrapper<JobHostOptions>(new JobHostOptions()), new Mock<IJobHostContextFactory>().Object);
-            host.Start();
+            var host = builder.Build();
+            using (host)
+            {
+                await host.StartAsync();
 
-            // verify the handled binding error
-            FunctionIndexingException fex = errorLogger.Errors.SingleOrDefault() as FunctionIndexingException;
-            Assert.True(fex.Handled);
-            Assert.Equal("BindingErrorsProgram.Invalid", fex.MethodName);
+                // verify the handled binding error
+                FunctionIndexingException fex = errorLogger.Errors.SingleOrDefault() as FunctionIndexingException;
+                Assert.True(fex.Handled);
+                Assert.Equal("BindingErrorsProgram.Invalid", fex.MethodName);
 
-            // verify that the binding error was logged
-            Assert.Equal(4, errorLogger.LogMessages.Count);
-            LogMessage logMessage = errorLogger.LogMessages.ElementAt(0);
-            Assert.Equal("Error indexing method 'BindingErrorsProgram.Invalid'", logMessage.FormattedMessage);
-            Assert.Same(fex, logMessage.Exception);
-            Assert.Equal("Invalid container name: invalid$=+1", logMessage.Exception.InnerException.Message);
+                // verify that the binding error was logged
+                Assert.Equal(4, errorLogger.GetLogMessages().Count);
+                LogMessage logMessage = errorLogger.GetLogMessages()[1];
+                Assert.Equal("Error indexing method 'BindingErrorsProgram.Invalid'", logMessage.FormattedMessage);
+                Assert.Same(fex, logMessage.Exception);
+                Assert.Equal("Invalid container name: invalid$=+1", logMessage.Exception.InnerException.Message);
 
-            // verify that the valid function was still indexed
-            logMessage = errorLogger.LogMessages.ElementAt(1);
-            Assert.True(logMessage.FormattedMessage.Contains("Found the following functions"));
-            Assert.True(logMessage.FormattedMessage.Contains("BindingErrorsProgram.Valid"));
+                // verify that the valid function was still indexed
+                logMessage = errorLogger.GetLogMessages()[2];
+                Assert.True(logMessage.FormattedMessage.Contains("Found the following functions"));
+                Assert.True(logMessage.FormattedMessage.Contains("BindingErrorsProgram.Valid"));
 
-            // verify that the job host was started successfully
-            logMessage = errorLogger.LogMessages.ElementAt(3);
-            Assert.Equal("Job host started", logMessage.FormattedMessage);
+                // verify that the job host was started successfully
+                logMessage = errorLogger.GetLogMessages()[3];
+                Assert.Equal("Job host started", logMessage.FormattedMessage);
 
-            host.Stop();
-            host.Dispose();
+                await host.StopAsync();
+            }
         }
 
         private static JobHostOptions CreateConfiguration()

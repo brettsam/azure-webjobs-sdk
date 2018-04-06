@@ -224,7 +224,7 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
 
                 // Make sure the aggregator was logged to
                 var logger = _loggerProvider.CreatedLoggers.Where(l => l.Category == LogCategories.Aggregator).Single();
-                Assert.Equal(4, logger.LogMessages.Count);
+                Assert.Equal(4, logger.GetLogMessages().Count);
 
                 // Make sure the eventCollector was logged 
                 eventCollector.AssertFunctionCount(4);
@@ -255,7 +255,7 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
 
                 // Make sure the aggregator was logged to
                 var logger = _loggerProvider.CreatedLoggers.Where(l => l.Category == LogCategories.Aggregator).Single();
-                Assert.Equal(4, logger.LogMessages.Count);
+                Assert.Equal(4, logger.GetLogMessages().Count);
             }
         }
 
@@ -310,7 +310,7 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             // Validate Logger
             // Logger only writes out a single log message (which includes the Exception).        
             var logger = _loggerProvider.CreatedLoggers.Where(l => l.Category == LogCategories.Results).Single();
-            var logMessage = logger.LogMessages.Single();
+            var logMessage = logger.GetLogMessages().Single();
             var loggerException = logMessage.Exception as FunctionException;
             Assert.NotNull(loggerException);
             Assert.Equal(expectedName, loggerException.MethodName);
@@ -410,14 +410,14 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                 var executorLogger = _loggerProvider.CreatedLoggers.Where(l => l.Category == LogCategories.CreateFunctionCategory(functionName)).Single();
 
                 // Results logs the exception with no message
-                Assert.NotNull(resultLogger.LogMessages.Single().Exception);
-                Assert.Null(resultLogger.LogMessages.Single().FormattedMessage);
+                Assert.NotNull(resultLogger.GetLogMessages().Single().Exception);
+                Assert.Null(resultLogger.GetLogMessages().Single().FormattedMessage);
 
                 // It logs Executed/Executing messages and the timeout message.
-                Assert.Equal(3, executorLogger.LogMessages.Count());
+                Assert.Equal(3, executorLogger.GetLogMessages().Count());
 
-                executorLogger.LogMessages.Single(p => p.FormattedMessage != null && p.FormattedMessage.StartsWith(expectedExceptionMessage));
-                LogMessage resultMessage = executorLogger.LogMessages.Single(p => p.FormattedMessage != null && p.FormattedMessage.StartsWith(expectedResultMessage));
+                executorLogger.GetLogMessages().Single(p => p.FormattedMessage != null && p.FormattedMessage.StartsWith(expectedExceptionMessage));
+                LogMessage resultMessage = executorLogger.GetLogMessages().Single(p => p.FormattedMessage != null && p.FormattedMessage.StartsWith(expectedResultMessage));
                 Assert.NotNull(resultMessage.Exception);
             }
             finally

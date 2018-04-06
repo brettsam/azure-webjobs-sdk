@@ -1,20 +1,19 @@
 ﻿// Copyright (c) .NET Foundation. All rights reserved.
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
-using Microsoft.Azure.WebJobs.Host.Config;
-using Microsoft.Azure.WebJobs.Host.Executors;
-using Microsoft.Azure.WebJobs.Host.Indexers;
-using Microsoft.Azure.WebJobs.Host.Loggers;
-using Microsoft.Azure.WebJobs.Host.Queues;
-using Microsoft.Azure.WebJobs.Host.Storage;
-using Microsoft.Azure.WebJobs.Host.Timers;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using System;
 using System.Linq;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Azure.WebJobs.Host.Config;
+using Microsoft.Azure.WebJobs.Host.Executors;
+using Microsoft.Azure.WebJobs.Host.Indexers;
+using Microsoft.Azure.WebJobs.Host.Storage;
+using Microsoft.Azure.WebJobs.Hosting;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Xunit;
 
 namespace Microsoft.Azure.WebJobs.Host.TestCommon
@@ -47,7 +46,7 @@ namespace Microsoft.Azure.WebJobs.Host.TestCommon
             {
                 // timeout. Event not signaled in time. 
                 throw new ApplicationException("Condition not reached within timeout.");
-            }         
+            }
         }
 
         public static void SetField(object target, string fieldName, object value)
@@ -85,15 +84,28 @@ namespace Microsoft.Azure.WebJobs.Host.TestCommon
             Assert.True(false, "Invoker should have failed");
         }
 
-        // Helper to quickly create a new JobHost object from a set of services. 
-        // Default is pure-in-memory, good for unit testing. 
-        public static TestJobHost<TProgram> NewJobHost<TProgram>(
-             params object[] services
-             )
+        public static JobHost<TProgram> NewJobHost<TProgram>(params object[] services)
         {
-            var config = NewConfig(typeof(TProgram), services);
-            var host = new TestJobHost<TProgram>(new OptionsWrapper<JobHostOptions>(new JobHostOptions()), null);
-            return host;
+            return null;
+        }
+
+        public static IHostBuilder ConfigureDefaultTestHost<TProgram>(this IHostBuilder builder)
+        {
+            return builder.ConfigureWebJobsHost()
+                .ConfigureServices(services =>
+                {
+                    services.AddSingleton<ITypeLocator>(new FakeTypeLocator(typeof(TProgram)));
+                });
+        }
+
+        public static TExtension GetExtension<TExtension>(this IHost host)
+        {
+            return host.Services.GetServices<IExtensionConfigProvider>().OfType<TExtension>().SingleOrDefault();
+        }
+
+        public static JobHost GetJobHost(this IHost host)
+        {
+            return host.Services.GetService<IJobHost>() as JobHost;
         }
 
         public static JobHostOptions NewConfig<TProgram>(params object[] services)
@@ -135,7 +147,7 @@ namespace Microsoft.Azure.WebJobs.Host.TestCommon
         }
 
         // TODO: DI: This needs to be updated to perform proper service registration
-        //public static void AddServices(this JobHostConfiguration config, params object[] services)
+        //public static void AddWebJobsServices(this IServiceCollection services, params object[] servicesToRegister)
         //{
         //    // Set extensionRegistry first since other services may depend on it. 
         //    foreach (var obj in services)
@@ -143,7 +155,7 @@ namespace Microsoft.Azure.WebJobs.Host.TestCommon
         //        IExtensionRegistry extensionRegistry = obj as IExtensionRegistry;
         //        if (extensionRegistry != null)
         //        {
-        //            config.AddService<IExtensionRegistry>(extensionRegistry);
+        //            services.AddSingleton<IExtensionRegistry>(extensionRegistry);
         //            break;
         //        }
         //    }
@@ -230,7 +242,7 @@ namespace Microsoft.Azure.WebJobs.Host.TestCommon
         //            continue;
         //        }
 
-        //        throw new InvalidOperationException("Test bug: Unrecognized type: " + obj.GetType().FullName);                
+        //        throw new InvalidOperationException("Test bug: Unrecognized type: " + obj.GetType().FullName);
         //    }
         //}
 

@@ -205,9 +205,9 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests.Singleton
             // verify the logger
             TestLogger logger = _loggerProvider.CreatedLoggers.Single() as TestLogger;
             Assert.Equal(LogCategories.Singleton, logger.Category);
-            Assert.Equal(2, logger.LogMessages.Count);
-            Assert.NotNull(logger.LogMessages.Single(m => m.Level == Extensions.Logging.LogLevel.Debug && m.FormattedMessage == "Singleton lock acquired (testid)"));
-            Assert.NotNull(logger.LogMessages.Single(m => m.Level == Extensions.Logging.LogLevel.Debug && m.FormattedMessage == "Singleton lock released (testid)"));
+            Assert.Equal(2, logger.GetLogMessages().Count);
+            Assert.NotNull(logger.GetLogMessages().Single(m => m.Level == Extensions.Logging.LogLevel.Debug && m.FormattedMessage == "Singleton lock acquired (testid)"));
+            Assert.NotNull(logger.GetLogMessages().Single(m => m.Level == Extensions.Logging.LogLevel.Debug && m.FormattedMessage == "Singleton lock released (testid)"));
 
             renewCount = 0;
             await Task.Delay(1000);

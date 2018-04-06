@@ -44,7 +44,7 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests.Listeners
             var e = await Assert.ThrowsAsync<FunctionListenerException>(async () => await listener.StartAsync(ct));
 
             // Validate Logger
-            var loggerEx = _loggerProvider.CreatedLoggers.Single().LogMessages.Single().Exception as FunctionException;
+            var loggerEx = _loggerProvider.CreatedLoggers.Single().GetLogMessages().Single().Exception as FunctionException;
             Assert.Equal("testfunc", loggerEx.MethodName);
             Assert.False(loggerEx.Handled);
 
@@ -68,7 +68,7 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests.Listeners
             string expectedMessage = "The listener for function 'testfunc' was unable to start.";
 
             // Validate Logger
-            var logMessage = handlingLoggerProvider.CreatedLoggers.Single().LogMessages.Single();
+            var logMessage = handlingLoggerProvider.CreatedLoggers.Single().GetLogMessages().Single();
             Assert.Equal(expectedMessage, logMessage.FormattedMessage);
             var loggerEx = logMessage.Exception as FunctionException;
             Assert.Equal("testfunc", loggerEx.MethodName);
@@ -112,7 +112,7 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests.Listeners
             await listener.StartAsync(ct);
             await listener.StopAsync(ct);
 
-            Assert.Empty(_loggerProvider.CreatedLoggers.Single().LogMessages);
+            Assert.Empty(_loggerProvider.CreatedLoggers.Single().GetLogMessages());
 
             goodListener.VerifyAll();
         }
