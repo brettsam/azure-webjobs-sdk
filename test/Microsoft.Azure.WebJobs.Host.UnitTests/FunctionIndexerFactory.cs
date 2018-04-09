@@ -27,7 +27,7 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests
             IStorageAccountProvider storageAccountProvider = GetStorageAccountProvider(account);
 
             var config = TestHelpers.NewConfig(storageAccountProvider, nameResolver, extensionRegistry);
-            var services = config.CreateStaticServices();
+            IServiceProvider services = null; // config.CreateStaticServices();
 
             ITriggerBindingProvider triggerBindingProvider = services.GetService<ITriggerBindingProvider>();
             IBindingProvider bindingProvider = services.GetService<IBindingProvider>();

@@ -238,7 +238,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.UnitTests
                     // },
                 },
             };
-            context.Config.AddService<ILoggerFactory>(new LoggerFactory());
+            // context.Config.AddService<ILoggerFactory>(new LoggerFactory());
             (config as IExtensionConfigProvider).Initialize(context);
 
             var options = config.GetOptions();

@@ -21,12 +21,12 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.UnitTests.Config
         public void Initialize_PerformsExpectedRegistrations()
         {
             JobHostOptions config = new JobHostOptions();
-            config.AddService<INameResolver>(new RandomNameResolver());
+            // config.AddService<INameResolver>(new RandomNameResolver());
 
             var serviceBusConfig = new ServiceBusOptions();
             ServiceBusExtensionConfig serviceBusExtensionConfig = new ServiceBusExtensionConfig(new OptionsWrapper<ServiceBusOptions>(serviceBusConfig), null, null);
 
-            IExtensionRegistry extensions = config.GetService<IExtensionRegistry>();
+            IExtensionRegistry extensions = null; // config.GetService<IExtensionRegistry>();
             ITriggerBindingProvider[] triggerBindingProviders = extensions.GetExtensions<ITriggerBindingProvider>().ToArray();
             Assert.Empty(triggerBindingProviders);
             IBindingProvider[] bindingProviders = extensions.GetExtensions<IBindingProvider>().ToArray();

@@ -10,6 +10,7 @@ using System.Threading.Tasks;
 using Microsoft.Azure.WebJobs.Host.Queues;
 using Microsoft.Azure.WebJobs.Host.TestCommon;
 using Microsoft.Azure.WebJobs.Host.Timers;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.WindowsAzure.Storage;
@@ -204,17 +205,9 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             // Reinitialize the name resolver to avoid conflicts
             _resolver = new RandomNameResolver();
 
-            JobHostOptions hostConfig = new JobHostOptions()
-            {
-                NameResolver = _resolver,
-
-                // TODO: DI:
-                //TypeLocator = new FakeTypeLocator(
-                //    this.GetType(),
-                //    typeof(BlobToCustomObjectBinder))
-            };
-
-            hostConfig.AddService<IWebJobsExceptionHandler>(new TestExceptionHandler());
+            IHost host = new HostBuilder()
+                .ConfigureDefaultTestHost<BlobToCustomObjectBinder>()
+                .Build();
 
             // write test entities
             string testTableName = _resolver.ResolveInString(TableName);
@@ -256,12 +249,12 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             });
             await table.ExecuteBatchAsync(operation);
 
-            JobHost host = new JobHost(new OptionsWrapper<JobHostOptions>(hostConfig), null);
+            JobHost jobHost = host.GetJobHost();
             var methodInfo = this.GetType().GetMethod("TableWithFilter", BindingFlags.Public | BindingFlags.Static);
             var input = new Person { Age = 25, Location = "Seattle" };
             string json = JsonConvert.SerializeObject(input);
             var arguments = new { person = json };
-            await host.CallAsync(methodInfo, arguments);
+            await jobHost.CallAsync(methodInfo, arguments);
 
             // wait for test results to appear
             await TestHelpers.Await(() => testResult != null);
@@ -272,7 +265,7 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             input = new Person { Age = 25, Location = "Tam O'Shanter" };
             json = JsonConvert.SerializeObject(input);
             arguments = new { person = json };
-            await host.CallAsync(methodInfo, arguments);
+            await jobHost.CallAsync(methodInfo, arguments);
             await TestHelpers.Await(() => testResult != null);
             results = (JArray)testResult;
             Assert.Single(results);
@@ -293,7 +286,7 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                 //    typeof(BlobToCustomObjectBinder))
             };
 
-            hostConfig.AddService<IWebJobsExceptionHandler>(new TestExceptionHandler());
+           // hostConfig.AddService<IWebJobsExceptionHandler>(new TestExceptionHandler());
 
             if (uploadBlobBeforeHostStart)
             {
@@ -346,7 +339,7 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                 //    typeof(BlobToCustomObjectBinder))
             };
 
-            hostConfig.AddService<IWebJobsExceptionHandler>(new TestExceptionHandler());
+           // hostConfig.AddService<IWebJobsExceptionHandler>(new TestExceptionHandler());
 
             // use a custom processor so we can grab the Id and PopReceipt
             //hostConfig.Queues.QueueProcessorFactory = new TestQueueProcessorFactory();

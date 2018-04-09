@@ -111,7 +111,7 @@ namespace Microsoft.Azure.WebJobs.Host.FunctionalTests
 
             var config = TestHelpers.NewConfig(typeof(CustomTableBindingExtensionProgram), account, ext);
 
-            var cm = (ConverterManager) config.GetService<IConverterManager>();
+            ConverterManager cm = null; // (ConverterManager) config.GetService<IConverterManager>();
                               
             var host = new JobHost<CustomTableBindingExtensionProgram>(new OptionsWrapper<JobHostOptions>(config), null);
             host.Call("Run"); // Act

@@ -33,7 +33,7 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests
             //Assert.NotNull(config.LoggerFactory);
             //Assert.False(config.Blobs.CentralizedPoisonQueue);
 
-            StorageClientFactory clientFactory = config.GetService<StorageClientFactory>();
+            StorageClientFactory clientFactory = null; // config.GetService<StorageClientFactory>();
             Assert.NotNull(clientFactory);
         }
 
@@ -151,125 +151,6 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests
             Assert.False(true, "Remove once DI fixes are in place");
             //ExceptionAssert.ThrowsArgumentNull(() => configuration.JobActivator = null, "value");
         }
-
-        [Fact]
-        public void GetService_IExtensionRegistry_ReturnsDefaultRegistry()
-        {
-            JobHostOptions configuration = new JobHostOptions();
-
-            IExtensionRegistry extensionRegistry = configuration.GetService<IExtensionRegistry>();
-            extensionRegistry.RegisterExtension<IComparable>("test1");
-            extensionRegistry.RegisterExtension<IComparable>("test2");
-            extensionRegistry.RegisterExtension<IComparable>("test3");
-
-            Assert.NotNull(extensionRegistry);
-            IComparable[] results = extensionRegistry.GetExtensions<IComparable>().ToArray();
-            Assert.Equal(3, results.Length);
-        }
-
-        [Theory]
-        [InlineData(typeof(IExtensionRegistry), typeof(DefaultExtensionRegistry))]
-        [InlineData(typeof(ITypeLocator), typeof(DefaultTypeLocator))]
-        [InlineData(typeof(StorageClientFactory), typeof(StorageClientFactory))]
-        [InlineData(typeof(INameResolver), typeof(DefaultNameResolver))]
-        [InlineData(typeof(IJobActivator), typeof(DefaultJobActivator))]
-        [InlineData(typeof(IConverterManager), typeof(ConverterManager))]
-        public void GetService_ReturnsExpectedDefaultServices(Type serviceType, Type expectedInstanceType)
-        {
-            JobHostOptions configuration = new JobHostOptions();
-
-            var service = configuration.GetService(serviceType);
-            Assert.Equal(expectedInstanceType, service.GetType());
-        }
-
-        [Fact]
-        public void GetService_ThrowsArgumentNull_WhenServiceTypeIsNull()
-        {
-            JobHostOptions configuration = new JobHostOptions();
-
-            ArgumentNullException exception = Assert.Throws<ArgumentNullException>(
-                () => configuration.GetService(null)
-            );
-            Assert.Equal("serviceType", exception.ParamName);
-        }
-
-        [Fact]
-        public void GetService_ReturnsNull_WhenServiceTypeNotFound()
-        {
-            JobHostOptions configuration = new JobHostOptions();
-
-            object result = configuration.GetService(typeof(IComparable));
-            Assert.Null(result);
-        }
-
-        [Fact]
-        public void AddService_AddsNewService()
-        {
-            JobHostOptions configuration = new JobHostOptions();
-
-            IComparable service = "test1";
-            configuration.AddService<IComparable>(service);
-
-            IComparable result = configuration.GetService<IComparable>();
-            Assert.Same(service, result);
-        }
-
-        [Fact]
-        public void AddService_ReplacesExistingService()
-        {
-            JobHostOptions configuration = new JobHostOptions();
-
-            IComparable service = "test1";
-            configuration.AddService<IComparable>(service);
-
-            IComparable result = configuration.GetService<IComparable>();
-            Assert.Same(service, result);
-
-            IComparable service2 = "test2";
-            configuration.AddService<IComparable>(service2);
-            result = configuration.GetService<IComparable>();
-            Assert.Same(service2, result);
-        }
-
-        [Fact]
-        public void AddService_ThrowsArgumentNull_WhenServiceTypeIsNull()
-        {
-            JobHostOptions configuration = new JobHostOptions();
-
-            ArgumentNullException exception = Assert.Throws<ArgumentNullException>(
-                () => configuration.AddService(null, "test1")
-            );
-            Assert.Equal("serviceType", exception.ParamName);
-        }
-
-        [Fact]
-        public void AddService_ThrowsArgumentOutOfRange_WhenInstanceNotInstanceOfType()
-        {
-            JobHostOptions configuration = new JobHostOptions();
-
-            ArgumentOutOfRangeException exception = Assert.Throws<ArgumentOutOfRangeException>(
-                () => configuration.AddService(typeof(IComparable), new object())
-            );
-            Assert.Equal("serviceInstance", exception.ParamName);
-        }
-
-        [Fact]
-        public void StorageClientFactory_GetterSetter()
-        {
-            JobHostOptions configuration = new JobHostOptions();
-
-            StorageClientFactory clientFactory = null;// configuration.StorageClientFactory;
-            Assert.NotNull(clientFactory);
-            Assert.Same(clientFactory, configuration.GetService<StorageClientFactory>());
-
-            CustomStorageClientFactory customFactory = new CustomStorageClientFactory();
-
-            // TODO: DI:
-            //configuration.StorageClientFactory = customFactory;
-            Assert.Same(customFactory, null);  //configuration.StorageClientFactory);
-            Assert.Same(customFactory, configuration.GetService<StorageClientFactory>());
-        }
-
 
         // TODO: DI: Change to use IHostingEnvironment
         //[Theory]

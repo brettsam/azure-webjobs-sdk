@@ -5,7 +5,6 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Azure.WebJobs.Host.TestCommon;
-using Microsoft.Azure.WebJobs.Host.Timers;
 using Microsoft.Extensions.Options;
 using Microsoft.WindowsAzure.Storage;
 using Microsoft.WindowsAzure.Storage.Queue;
@@ -73,7 +72,7 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                 // TODO: DI:
                 //TypeLocator = new FakeTypeLocator(typeof(ParallelExecutionTests)),
             };
-            hostConfiguration.AddService<IWebJobsExceptionHandler>(new TestExceptionHandler());
+            // hostConfiguration.AddService<IWebJobsExceptionHandler>(new TestExceptionHandler());
 
             // TODO: DI:
             //hostConfiguration.Queues.BatchSize = batchSize;

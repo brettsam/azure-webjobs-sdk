@@ -125,7 +125,7 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests.Loggers
         {
             public void Initialize(ExtensionConfigContext context)
             {
-                var logger = (MyLogger)context.Config.GetService<IAsyncCollector<FunctionInstanceLogEntry>>();
+                MyLogger logger = null; // (MyLogger)context.Config.GetService<IAsyncCollector<FunctionInstanceLogEntry>>();
                 context.AddBindingRule<LoggerTestAttribute>().BindToInput(attr =>
                 {
                     if (attr.Fail)

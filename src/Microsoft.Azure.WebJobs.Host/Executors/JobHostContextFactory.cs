@@ -46,12 +46,10 @@ namespace Microsoft.Azure.WebJobs.Host.Executors
         private readonly IExtensionRegistry _extensions;
         private readonly IStorageAccountProvider _storageAccountProvider;
         private readonly ILoggerFactory _loggerFactory;
-        private readonly IFunctionResultAggregatorFactory _aggregatorFactory;
         private readonly IOptions<JobHostQueuesOptions> _queueConfiguration;
         private readonly IWebJobsExceptionHandler _exceptionHandler;
         private readonly SharedQueueHandler _sharedQueueHandler;
         private readonly IOptions<JobHostOptions> _jobHostOptions;
-        private readonly IOptions<FunctionResultAggregatorOptions> _aggregatorOptions;
         private readonly IOptions<JobHostBlobsOptions> _blobsConfiguration;
         private readonly IServiceProvider _serviceProvider;
 
@@ -65,11 +63,9 @@ namespace Microsoft.Azure.WebJobs.Host.Executors
             IExtensionRegistry extensions,
             IStorageAccountProvider storageAccountProvider,
             ILoggerFactory loggerFactory,
-            IFunctionResultAggregatorFactory aggregatorFactory,
             IWebJobsExceptionHandler exceptionHandler,
             SharedQueueHandler sharedQueueHandler,
             IOptions<JobHostOptions> jobHostOptions,
-            IOptions<FunctionResultAggregatorOptions> aggregatorOptions,
             IOptions<JobHostQueuesOptions> queueOptions,
             IOptions<JobHostBlobsOptions> blobsConfiguration,
             IServiceProvider serviceProvider)
@@ -84,12 +80,10 @@ namespace Microsoft.Azure.WebJobs.Host.Executors
             _extensions = extensions;
             _storageAccountProvider = storageAccountProvider;
             _loggerFactory = loggerFactory;
-            _aggregatorFactory = aggregatorFactory;
             _queueConfiguration = queueOptions;
             _exceptionHandler = exceptionHandler;
             _sharedQueueHandler = sharedQueueHandler;
             _jobHostOptions = jobHostOptions;
-            _aggregatorOptions = aggregatorOptions;
             _blobsConfiguration = blobsConfiguration;
             _serviceProvider = serviceProvider;
         }
@@ -97,33 +91,6 @@ namespace Microsoft.Azure.WebJobs.Host.Executors
         public async Task<JobHostContext> Create(CancellationToken shutdownToken, CancellationToken cancellationToken)
         {
             RegisterBuiltInExtensions();
-
-            // Create the aggregator if all the pieces are configured
-            IAsyncCollector<FunctionInstanceLogEntry> aggregator = null;
-            FunctionResultAggregatorOptions aggregatorOptions = _aggregatorOptions.Value;
-            if (_loggerFactory != null && _aggregatorFactory != null && aggregatorOptions.IsEnabled)
-            {
-                aggregator = _aggregatorFactory.Create(aggregatorOptions.BatchSize, aggregatorOptions.FlushTimeout, _loggerFactory);
-            }
-
-            var blobsConfiguration = _blobsConfiguration.Value;
-
-            IAsyncCollector<FunctionInstanceLogEntry> registeredFunctionEventCollector = _serviceProvider.GetService<IAsyncCollector<FunctionInstanceLogEntry>>();
-
-            IAsyncCollector<FunctionInstanceLogEntry> functionEventCollector;
-            if (registeredFunctionEventCollector != null && aggregator != null)
-            {
-                // If there are both an aggregator and a registered FunctionEventCollector, wrap them in a composite
-                functionEventCollector = new CompositeFunctionEventCollector(new[] { registeredFunctionEventCollector, aggregator });
-            }
-            else
-            {
-                // Otherwise, take whichever one is null (or use null if both are)
-                functionEventCollector = aggregator ?? registeredFunctionEventCollector;
-            }
-
-            bool hasFastTableHook = registeredFunctionEventCollector != null;
-            bool noDashboardStorage = _storageAccountProvider.DashboardConnectionString == null;
 
             // Only testing will override these interfaces. 
             IHostInstanceLoggerProvider hostInstanceLoggerProvider = _serviceProvider.GetService<IHostInstanceLoggerProvider>();
@@ -263,7 +230,6 @@ namespace Microsoft.Azure.WebJobs.Host.Executors
                     functions,
                     hostCallExecutor,
                     listener,
-                    functionEventCollector,
                     _loggerFactory);
             }
         }

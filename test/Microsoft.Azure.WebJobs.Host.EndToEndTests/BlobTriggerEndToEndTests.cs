@@ -74,7 +74,7 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             // TODO: DI: This needs to be updated to perform proper service registration
             //config.AddServices(services);
             //config.AddServices(_nameResolver);
-            config.AddService<IWebJobsExceptionHandler>(new TestExceptionHandler());
+            //config.AddService<IWebJobsExceptionHandler>(new TestExceptionHandler());
             return config;
         }
 

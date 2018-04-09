@@ -98,12 +98,12 @@ namespace Microsoft.Azure.WebJobs.Host.FunctionalTests
                 .Callback<CancellationToken>(t => flushCalls++)
                 .Returns(Task.CompletedTask);
 
-            var mockFactory = new Mock<IFunctionResultAggregatorFactory>(MockBehavior.Strict);
+            var mockFactory = new Mock<IFunctionEventCollectorFactory>(MockBehavior.Strict);
             mockFactory
-                .Setup(f => f.Create(5, TimeSpan.FromSeconds(1), It.IsAny<ILoggerFactory>()))
+                .Setup(f => f.Create())
                 .Returns(mockAggregator.Object);
 
-            config.AddService<IFunctionResultAggregatorFactory>(mockFactory.Object);
+            //config.AddService<IFunctionResultAggregatorFactory>(mockFactory.Object);
 
             const int N = 5;
             // TODO: DI:
@@ -138,8 +138,8 @@ namespace Microsoft.Azure.WebJobs.Host.FunctionalTests
 
             // Ensure the aggregator is never configured by registering an
             // AggregatorFactory that with a strict, unconfigured mock.
-            var mockFactory = new Mock<IFunctionResultAggregatorFactory>(MockBehavior.Strict);
-            config.AddService<IFunctionResultAggregatorFactory>(mockFactory.Object);
+            var mockFactory = new Mock<IFunctionEventCollectorFactory>(MockBehavior.Strict);
+            // config.AddService<IFunctionResultAggregatorFactory>(mockFactory.Object);
 
             using (JobHost host = new JobHost(new OptionsWrapper<JobHostOptions>(config), new Mock<IJobHostContextFactory>().Object))
             {
@@ -158,8 +158,8 @@ namespace Microsoft.Azure.WebJobs.Host.FunctionalTests
 
             // Ensure the aggregator is never configured by registering an
             // AggregatorFactory that with a strict, unconfigured mock.
-            var mockFactory = new Mock<IFunctionResultAggregatorFactory>(MockBehavior.Strict);
-            config.AddService<IFunctionResultAggregatorFactory>(mockFactory.Object);
+            var mockFactory = new Mock<IFunctionEventCollectorFactory>(MockBehavior.Strict);
+            //config.AddService<IFunctionResultAggregatorFactory>(mockFactory.Object);
 
             using (JobHost host = new JobHost(new OptionsWrapper<JobHostOptions>(config), new Mock<IJobHostContextFactory>().Object))
             {
@@ -185,10 +185,10 @@ namespace Microsoft.Azure.WebJobs.Host.FunctionalTests
             factory.AddProvider(_loggerProvider);
 
             var config = new JobHostOptions();
-            config.AddService(accountProvider);
+            // config.AddService(accountProvider);
             // TODO: DI: 
             //config.TypeLocator = new FakeTypeLocator(new[] { typeof(ILoggerFunctions) });
-            config.AddService(factory);
+            // config.AddService(factory);
             //config.Aggregator.IsEnabled = false; // disable aggregator
 
             return config;

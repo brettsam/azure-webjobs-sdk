@@ -47,7 +47,7 @@ namespace Microsoft.Azure.WebJobs
             // maintaining some of the existing dependencies and model we previously had, 
             // but this should be reviewed as it can be improved.
             services.TryAddSingleton<IExtensionRegistry, DefaultExtensionRegistry>();
-            
+
             // Type conversion
             services.TryAddSingleton<IExtensionTypeLocator, ExtensionTypeLocator>();
             services.TryAddSingleton<ITypeLocator>(p => new DefaultTypeLocator(p.GetRequiredService<IConsoleProvider>().Out, p.GetRequiredService<IExtensionRegistry>()));
@@ -67,9 +67,10 @@ namespace Microsoft.Azure.WebJobs
             services.TryAddSingleton((p) => p.GetService<IContextSetter<IBlobWrittenWatcher>>() as IContextGetter<IBlobWrittenWatcher>);
             services.TryAddSingleton<IDistributedLockManagerFactory, DefaultDistributedLockManagerFactory>();
             services.TryAddSingleton<IDistributedLockManager>(p => p.GetRequiredService<IDistributedLockManagerFactory>().Create());
+            services.TryAddSingleton<IJobHostMetadataProvider, JobHostMetadataProvider>();
 
             services.AddWebJobsLogging();
-            
+
             // TODO: FACAVAL FIX THIS - Right now, We're only registering the FixedIdProvider
             // need to register the dynamic ID provider and verify if the logic in it can be improved (and have the storage dependency removed)
             services.TryAddSingleton<IHostIdProvider, FixedHostIdProvider>();
@@ -86,7 +87,7 @@ namespace Microsoft.Azure.WebJobs
             services.TryAddSingleton<StorageClientFactory>();
             services.TryAddSingleton<INameResolver, DefaultNameResolver>();
             services.TryAddSingleton<IJobActivator, DefaultJobActivator>();
-            services.TryAddSingleton<IFunctionResultAggregatorFactory, FunctionResultAggregatorFactory>();
+            services.TryAddSingleton<IFunctionEventCollectorFactory, FunctionEventCollectorFactory>();
 
             // Options setup
             services.TryAddEnumerable(ServiceDescriptor.Transient<IConfigureOptions<JobHostOptions>, JobHostOptionsSetup>());

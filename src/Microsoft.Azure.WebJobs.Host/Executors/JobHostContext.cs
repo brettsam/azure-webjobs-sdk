@@ -4,7 +4,6 @@
 using System;
 using Microsoft.Azure.WebJobs.Host.Indexers;
 using Microsoft.Azure.WebJobs.Host.Listeners;
-using Microsoft.Azure.WebJobs.Host.Loggers;
 using Microsoft.Extensions.Logging;
 
 namespace Microsoft.Azure.WebJobs.Host.Executors
@@ -16,7 +15,6 @@ namespace Microsoft.Azure.WebJobs.Host.Executors
         private readonly IFunctionIndexLookup _functionLookup;
         private readonly IFunctionExecutor _executor;
         private readonly IListener _listener;
-        private readonly IAsyncCollector<FunctionInstanceLogEntry> _functionEventCollector; // optional        
         private readonly ILoggerFactory _loggerFactory;
 
         private bool _disposed;
@@ -24,13 +22,11 @@ namespace Microsoft.Azure.WebJobs.Host.Executors
         public JobHostContext(IFunctionIndexLookup functionLookup,
             IFunctionExecutor executor,
             IListener listener,
-            IAsyncCollector<FunctionInstanceLogEntry> functionEventCollector = null,
             ILoggerFactory loggerFactory = null)
         {
             _functionLookup = functionLookup;
             _executor = executor;
             _listener = listener;
-            _functionEventCollector = functionEventCollector;
             _loggerFactory = loggerFactory;
         }
 
@@ -58,15 +54,6 @@ namespace Microsoft.Azure.WebJobs.Host.Executors
             {
                 ThrowIfDisposed();
                 return _listener;
-            }
-        }
-
-        public IAsyncCollector<FunctionInstanceLogEntry> FunctionEventCollector
-        {
-            get
-            {
-                ThrowIfDisposed();
-                return _functionEventCollector;
             }
         }
 

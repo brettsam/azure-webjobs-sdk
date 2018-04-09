@@ -36,14 +36,14 @@ namespace Microsoft.Azure.WebJobs.Host.Executors
 
         public FunctionExecutor(IFunctionInstanceLogger functionInstanceLogger, IFunctionOutputLoggerProvider functionOutputLoggerProvider,
                 IWebJobsExceptionHandler exceptionHandler,
-                IAsyncCollector<FunctionInstanceLogEntry> functionEventCollector = null,
+                IFunctionEventCollectorFactory functionEventCollectorFactory = null,
                 ILoggerFactory loggerFactory = null,
                 IEnumerable<IFunctionFilter> globalFunctionFilters = null)
         {
             _functionInstanceLogger = functionInstanceLogger ?? throw new ArgumentNullException(nameof(functionInstanceLogger));
             _functionOutputLoggerProvider = functionOutputLoggerProvider;
             _exceptionHandler = exceptionHandler ?? throw new ArgumentNullException(nameof(exceptionHandler));
-            _functionEventCollector = functionEventCollector;
+            _functionEventCollector = functionEventCollectorFactory?.Create();
             _loggerFactory = loggerFactory;
             _resultsLogger = _loggerFactory?.CreateLogger(LogCategories.Results);
             _globalFunctionFilters = globalFunctionFilters ?? Enumerable.Empty<IFunctionFilter>();

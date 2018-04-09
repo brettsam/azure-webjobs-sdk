@@ -28,7 +28,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.UnitTests.Config
         {
             JobHostOptions config = new JobHostOptions();
 
-            IExtensionRegistry extensions = config.GetService<IExtensionRegistry>();
+            IExtensionRegistry extensions = null; // config.GetService<IExtensionRegistry>();
             IExtensionConfigProvider[] configProviders = extensions.GetExtensions<IExtensionConfigProvider>().ToArray();
             Assert.Empty(configProviders);
 
@@ -51,7 +51,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.UnitTests.Config
         {
             JobHostOptions config = new JobHostOptions();
 
-            IExtensionRegistry extensions = config.GetService<IExtensionRegistry>();
+            IExtensionRegistry extensions = null; // config.GetService<IExtensionRegistry>();
             IExtensionConfigProvider[] configProviders = extensions.GetExtensions<IExtensionConfigProvider>().ToArray();
             Assert.Empty(configProviders);
 

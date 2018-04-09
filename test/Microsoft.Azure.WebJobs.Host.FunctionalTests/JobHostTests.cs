@@ -1,6 +1,7 @@
 ﻿// Copyright (c) .NET Foundation. All rights reserved.
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
+using System;
 using System.IO;
 using System.Threading.Tasks;
 using Microsoft.Azure.WebJobs.Host.Bindings;
@@ -23,9 +24,9 @@ namespace Microsoft.Azure.WebJobs.Host.FunctionalTests
         {
             IStorageAccount account = new FakeStorageAccount();
             var config = TestHelpers.NewConfig(account);
-            
+
             // Can do the static init. Get the binders. 
-            var ctx = config.CreateStaticServices();
+            IServiceProvider ctx = null; // config.CreateStaticServices();
             var provider = ctx.GetService<IBindingProvider>();
 
             var attr = new BlobAttribute("container/path", FileAccess.Read);

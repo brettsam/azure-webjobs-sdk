@@ -702,7 +702,7 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                     //TypeLocator = new FakeTypeLocator(typeof(BlobBindingEndToEndTests)),
                 };
 
-                hostConfiguration.AddService<IWebJobsExceptionHandler>(new TestExceptionHandler());
+                //hostConfiguration.AddService<IWebJobsExceptionHandler>(new TestExceptionHandler());
 
                 Config = hostConfiguration;
 

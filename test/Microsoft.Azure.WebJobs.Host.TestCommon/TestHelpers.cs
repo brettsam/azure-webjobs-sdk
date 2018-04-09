@@ -10,6 +10,7 @@ using Microsoft.Azure.WebJobs.Host.Config;
 using Microsoft.Azure.WebJobs.Host.Executors;
 using Microsoft.Azure.WebJobs.Host.Indexers;
 using Microsoft.Azure.WebJobs.Host.Storage;
+using Microsoft.Azure.WebJobs.Host.Timers;
 using Microsoft.Azure.WebJobs.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -95,7 +96,19 @@ namespace Microsoft.Azure.WebJobs.Host.TestCommon
                 .ConfigureServices(services =>
                 {
                     services.AddSingleton<ITypeLocator>(new FakeTypeLocator(typeof(TProgram)));
+
+                    // Register this to fail a test if a background exception is thrown
+                    services.AddSingleton<IWebJobsExceptionHandlerFactory, TestExceptionHandlerFactory>();
+                })
+                .ConfigureLogging(logging =>
+                {
+                    logging.AddProvider(new TestLoggerProvider());
                 });
+        }
+
+        public static TestLoggerProvider GetTestLoggerProvider(this IHost host)
+        {
+            return host.Services.GetServices<ILoggerProvider>().OfType<TestLoggerProvider>().Single();
         }
 
         public static TExtension GetExtension<TExtension>(this IHost host)

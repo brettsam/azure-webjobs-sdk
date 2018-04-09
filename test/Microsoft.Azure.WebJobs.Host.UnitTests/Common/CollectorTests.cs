@@ -29,7 +29,6 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests
             public string Bonus { get; set; }
         }
 
-
         public class ErrorProgram
         {
             // Malformed 
@@ -55,6 +54,7 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests
 
             FakeQueueClient client = host.GetExtension<FakeQueueClient>();
             JobHost jobHost = host.GetJobHost();
+            var p = host.GetTestLoggerProvider();
 
             // Call 'ok' method which has no errors. Should still get the indexing errors from the other method. 
             var m = typeof(ErrorProgram).GetMethod(nameof(ErrorProgram.ValidMethod));

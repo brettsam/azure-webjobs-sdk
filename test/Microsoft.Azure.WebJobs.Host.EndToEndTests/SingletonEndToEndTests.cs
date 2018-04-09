@@ -11,7 +11,6 @@ using Microsoft.Azure.WebJobs.Host.Bindings;
 using Microsoft.Azure.WebJobs.Host.Listeners;
 using Microsoft.Azure.WebJobs.Host.Protocols;
 using Microsoft.Azure.WebJobs.Host.TestCommon;
-using Microsoft.Azure.WebJobs.Host.Timers;
 using Microsoft.Azure.WebJobs.Host.Triggers;
 using Microsoft.Extensions.Options;
 using Microsoft.WindowsAzure.Storage;
@@ -614,12 +613,12 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                 //JobActivator = activator
             };
 
-            config.AddService<IWebJobsExceptionHandler>(new TestExceptionHandler());
+            //config.AddService<IWebJobsExceptionHandler>(new TestExceptionHandler());
             //config.Queues.MaxPollingInterval = TimeSpan.FromSeconds(2);
             //config.Singleton.LockAcquisitionTimeout = TimeSpan.FromSeconds(10);
             //config.Singleton.LockAcquisitionPollingInterval = TimeSpan.FromMilliseconds(500);
 
-            IExtensionRegistry registry = config.GetService<IExtensionRegistry>();
+            IExtensionRegistry registry = null; // config.GetService<IExtensionRegistry>();
             registry.RegisterExtension<ITriggerBindingProvider>(new TestTriggerAttributeBindingProvider());
 
             JobHost host = new JobHost(new OptionsWrapper<JobHostOptions>(config), null);
