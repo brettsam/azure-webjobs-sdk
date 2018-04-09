@@ -465,18 +465,10 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests
                 .Returns(errorLogger);
 
             var builder = new HostBuilder()
-                .UseEnvironment("Development")
-                .ConfigureWebJobsHost()
+                .ConfigureDefaultTestHost<BindingErrorsProgram>()
                 .ConfigureLogging(logging =>
                 {
-                    logging.ClearProviders();
                     logging.AddProvider(mockProvider.Object);
-                })
-                .ConfigureServices(services =>
-                {
-                    services.AddSingleton<ITypeLocator>(new FakeTypeLocator(typeof(BindingErrorsProgram)));
-                    services.AddSingleton<IWebJobsExceptionHandler, TestExceptionHandler>();
-                    services.AddSingleton<IHostIdProvider, FixedHostIdProvider>();
                 });
 
             var host = builder.Build();
@@ -531,7 +523,6 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests
             return TestHelpers.NewConfig(
                 storageAccountProvider,
                 singletonManager,
-                new NullConsoleProvider(),
                 new FixedHostIdProvider(Guid.NewGuid().ToString("N")),
                 new EmptyFunctionIndexProvider()
                 );

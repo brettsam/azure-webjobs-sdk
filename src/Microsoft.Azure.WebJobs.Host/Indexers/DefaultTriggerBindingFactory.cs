@@ -19,7 +19,6 @@ namespace Microsoft.Azure.WebJobs.Host.Indexers
     {
         private readonly INameResolver _nameResolver;
         private readonly IStorageAccountProvider _storageAccountProvider;
-        private readonly IExtensionTypeLocator _extensionTypeLocator;
         private readonly IHostIdProvider _hostIdProvider;
         private readonly IOptions<JobHostQueuesOptions> _queueConfiguration;
         private readonly IOptions<JobHostBlobsOptions> _blobsConfiguration;
@@ -33,7 +32,6 @@ namespace Microsoft.Azure.WebJobs.Host.Indexers
 
         public DefaultTriggerBindingFactory(INameResolver nameResolver,
             IStorageAccountProvider storageAccountProvider,
-            IExtensionTypeLocator extensionTypeLocator,
             IHostIdProvider hostIdProvider,
             IOptions<JobHostQueuesOptions> queueConfiguration,
             IOptions<JobHostBlobsOptions> blobsConfiguration,
@@ -47,7 +45,6 @@ namespace Microsoft.Azure.WebJobs.Host.Indexers
         {
             _nameResolver = nameResolver ?? throw new System.ArgumentNullException(nameof(nameResolver));
             _storageAccountProvider = storageAccountProvider ?? throw new System.ArgumentNullException(nameof(storageAccountProvider));
-            _extensionTypeLocator = extensionTypeLocator ?? throw new System.ArgumentNullException(nameof(extensionTypeLocator));
             _hostIdProvider = hostIdProvider ?? throw new System.ArgumentNullException(nameof(hostIdProvider));
             _queueConfiguration = queueConfiguration ?? throw new System.ArgumentNullException(nameof(queueConfiguration));
             _blobsConfiguration = blobsConfiguration ?? throw new System.ArgumentNullException(nameof(blobsConfiguration));
@@ -64,12 +61,12 @@ namespace Microsoft.Azure.WebJobs.Host.Indexers
             var innerProviders = new List<ITriggerBindingProvider>
             {
                 new QueueTriggerAttributeBindingProvider(_nameResolver, _storageAccountProvider,
-                _queueConfiguration.Value, _exceptionHandler, _messageEnqueuedWatcherSetter,
-                _sharedContextProvider, _loggerFactory),
+                    _queueConfiguration.Value, _exceptionHandler, _messageEnqueuedWatcherSetter,
+                    _sharedContextProvider, _loggerFactory),
 
-                new BlobTriggerAttributeBindingProvider(_nameResolver, _storageAccountProvider, _extensionTypeLocator,
-                _hostIdProvider, _queueConfiguration.Value, _blobsConfiguration.Value, _exceptionHandler, _blobWrittenWatcherSetter,
-                _messageEnqueuedWatcherSetter, _sharedContextProvider, _singletonManager, _loggerFactory)
+                new BlobTriggerAttributeBindingProvider(_nameResolver, _storageAccountProvider, _hostIdProvider, 
+                    _queueConfiguration.Value, _blobsConfiguration.Value, _exceptionHandler, _blobWrittenWatcherSetter,
+                    _messageEnqueuedWatcherSetter, _sharedContextProvider, _singletonManager, _loggerFactory)
             };
 
             // add any registered extension binding providers

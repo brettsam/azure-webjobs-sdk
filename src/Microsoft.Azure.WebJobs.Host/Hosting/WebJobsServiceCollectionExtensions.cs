@@ -49,8 +49,7 @@ namespace Microsoft.Azure.WebJobs
             services.TryAddSingleton<IExtensionRegistry, DefaultExtensionRegistry>();
 
             // Type conversion
-            services.TryAddSingleton<IExtensionTypeLocator, ExtensionTypeLocator>();
-            services.TryAddSingleton<ITypeLocator>(p => new DefaultTypeLocator(p.GetRequiredService<IConsoleProvider>().Out, p.GetRequiredService<IExtensionRegistry>()));
+            services.TryAddSingleton<ITypeLocator, DefaultTypeLocator>();
             services.TryAddSingleton<IConverterManager, ConverterManager>();
 
             services.TryAddSingleton<SingletonManager>();
@@ -107,7 +106,6 @@ namespace Microsoft.Azure.WebJobs
             services.TryAddSingleton<IFunctionOutputLoggerProvider>(p => p.GetRequiredService<LoggerProviderFactory>().GetLoggerProvider<IFunctionOutputLoggerProvider>());
             services.TryAddSingleton<IFunctionInstanceLoggerProvider>(p => p.GetRequiredService<LoggerProviderFactory>().GetLoggerProvider<IFunctionInstanceLoggerProvider>());
             services.TryAddSingleton<IHostInstanceLoggerProvider>(p => p.GetRequiredService<LoggerProviderFactory>().GetLoggerProvider<IHostInstanceLoggerProvider>());
-            services.TryAddSingleton<IConsoleProvider, DefaultConsoleProvider>();
 
             return services;
         }

@@ -17,6 +17,7 @@ using Microsoft.Azure.WebJobs.Host.Storage.Blob;
 using Microsoft.Azure.WebJobs.Host.Timers;
 using Microsoft.Azure.WebJobs.Host.Triggers;
 using Microsoft.Extensions.Logging;
+using Newtonsoft.Json;
 
 namespace Microsoft.Azure.WebJobs.Host.Blobs.Triggers
 {
@@ -42,6 +43,7 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Triggers
             // Trigger already has the IStorageBlob. Whereas BindToInput defines: Attr-->Stream. 
             //  Converter manager already has Stream-->Byte[],String,TextReader
             context.AddConverter<IStorageBlob, Stream>(ConvertToStreamAsync);
+            context.AddOpenConverter<Stream, OpenType.Poco>(typeof(StreamToPocoConverter<>));
 
             // Blob type is a property of an existing blob. 
             context.AddConverter(new StorageBlobToCloudBlobConverter());
@@ -70,6 +72,18 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Triggers
 
             return blob;
         }
+
+        private class StreamToPocoConverter<T> : IAsyncConverter<Stream, T>
+        {
+            public async Task<T> ConvertAsync(Stream input, CancellationToken cancellationToken)
+            {
+                using (StreamReader reader = new StreamReader(input))
+                {                    
+                    string jsonString = await reader.ReadToEndAsync();
+                    return JsonConvert.DeserializeObject<T>(jsonString);
+                }
+            }
+        }
     }
 
     internal class BlobTriggerAttributeBindingProvider : ITriggerBindingProvider
@@ -88,7 +102,6 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Triggers
 
         public BlobTriggerAttributeBindingProvider(INameResolver nameResolver,
             IStorageAccountProvider accountProvider,
-            IExtensionTypeLocator extensionTypeLocator,
             IHostIdProvider hostIdProvider,
             JobHostQueuesOptions queueOptions,
             JobHostBlobsOptions blobsConfiguration,
@@ -99,11 +112,6 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Triggers
             SingletonManager singletonManager,
             ILoggerFactory loggerFactory)
         {
-            if (extensionTypeLocator == null)
-            {
-                throw new ArgumentNullException(nameof(extensionTypeLocator));
-            }
-
             _accountProvider = accountProvider ?? throw new ArgumentNullException(nameof(accountProvider));
             _hostIdProvider = hostIdProvider ?? throw new ArgumentNullException(nameof(hostIdProvider));
             _queueOptions = queueOptions ?? throw new ArgumentNullException(nameof(queueOptions));

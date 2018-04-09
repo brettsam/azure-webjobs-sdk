@@ -90,20 +90,25 @@ namespace Microsoft.Azure.WebJobs.Host.TestCommon
             return null;
         }
 
-        public static IHostBuilder ConfigureDefaultTestHost<TProgram>(this IHostBuilder builder)
+        public static IHostBuilder ConfigureDefaultTestHost(this IHostBuilder builder, params Type[] types)
         {
             return builder.ConfigureWebJobsHost()
-                .ConfigureServices(services =>
-                {
-                    services.AddSingleton<ITypeLocator>(new FakeTypeLocator(typeof(TProgram)));
+               .ConfigureServices(services =>
+               {
+                   services.AddSingleton<ITypeLocator>(new FakeTypeLocator(types));
 
-                    // Register this to fail a test if a background exception is thrown
-                    services.AddSingleton<IWebJobsExceptionHandlerFactory, TestExceptionHandlerFactory>();
-                })
-                .ConfigureLogging(logging =>
-                {
-                    logging.AddProvider(new TestLoggerProvider());
-                });
+                   // Register this to fail a test if a background exception is thrown
+                   services.AddSingleton<IWebJobsExceptionHandlerFactory, TestExceptionHandlerFactory>();
+               })
+               .ConfigureLogging(logging =>
+               {
+                   logging.AddProvider(new TestLoggerProvider());
+               });
+        }
+
+        public static IHostBuilder ConfigureDefaultTestHost<TProgram>(this IHostBuilder builder)
+        {
+            return builder.ConfigureDefaultTestHost(typeof(TProgram));
         }
 
         public static TestLoggerProvider GetTestLoggerProvider(this IHost host)

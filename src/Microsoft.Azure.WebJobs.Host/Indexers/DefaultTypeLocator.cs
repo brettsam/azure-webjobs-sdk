@@ -6,6 +6,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using Microsoft.Azure.WebJobs.Logging;
+using Microsoft.Extensions.Logging;
 
 namespace Microsoft.Azure.WebJobs.Host.Indexers
 {
@@ -14,22 +16,13 @@ namespace Microsoft.Azure.WebJobs.Host.Indexers
     {
         private static readonly string WebJobsAssemblyName = AssemblyNameCache.GetName(typeof(TableAttribute).Assembly).Name;
 
-        private readonly TextWriter _log;
+        private readonly ILogger _logger;
         private readonly IExtensionRegistry _extensions;
 
-        public DefaultTypeLocator(TextWriter log, IExtensionRegistry extensions)
+        public DefaultTypeLocator(TextWriter log, IExtensionRegistry extensions, ILoggerFactory loggerFactory)
         {
-            if (log == null)
-            {
-                throw new ArgumentNullException("log");
-            }
-            if (extensions == null)
-            {
-                throw new ArgumentNullException("extensions");
-            }
-
-            _log = log;
-            _extensions = extensions;
+            _extensions = extensions ?? throw new ArgumentNullException(nameof(extensions));
+            _logger = loggerFactory.CreateLogger(LogCategories.Startup);
         }
 
         // Helper to filter out assemblies that don't reference the SDK or
@@ -42,7 +35,7 @@ namespace Microsoft.Azure.WebJobs.Host.Indexers
                 return false;
             }
 
-            AssemblyName[] referencedAssemblyNames = assembly.GetReferencedAssemblies();  
+            AssemblyName[] referencedAssemblyNames = assembly.GetReferencedAssemblies();
             foreach (var referencedAssemblyName in referencedAssemblyNames)
             {
                 if (String.Equals(referencedAssemblyName.Name, WebJobsAssemblyName, StringComparison.OrdinalIgnoreCase))
@@ -121,16 +114,16 @@ namespace Microsoft.Azure.WebJobs.Host.Indexers
             }
             catch (ReflectionTypeLoadException ex)
             {
-                _log.WriteLine("Warning: Only got partial types from assembly: {0}", assembly.FullName);
-                _log.WriteLine("Exception message: {0}", ex.ToString());
+                _logger.LogInformation("Warning: Only got partial types from assembly: {0}", assembly.FullName);
+                _logger.LogInformation("Exception message: {0}", ex.ToString());
 
                 // In case of a type load exception, at least get the types that did succeed in loading
                 types = ex.Types;
             }
             catch (Exception ex)
             {
-                _log.WriteLine("Warning: Failed to get types from assembly: {0}", assembly.FullName);
-                _log.WriteLine("Exception message: {0}", ex.ToString());
+                _logger.LogInformation("Warning: Failed to get types from assembly: {0}", assembly.FullName);
+                _logger.LogInformation("Exception message: {0}", ex.ToString());
             }
 
             return types;
