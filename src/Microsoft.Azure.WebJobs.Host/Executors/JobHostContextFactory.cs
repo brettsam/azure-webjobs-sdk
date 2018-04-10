@@ -10,20 +10,15 @@ using System.Reflection;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.Azure.WebJobs.Host.Blobs.Bindings;
-using Microsoft.Azure.WebJobs.Host.Blobs.Triggers;
-using Microsoft.Azure.WebJobs.Host.Config;
 using Microsoft.Azure.WebJobs.Host.Dispatch;
 using Microsoft.Azure.WebJobs.Host.Indexers;
 using Microsoft.Azure.WebJobs.Host.Listeners;
 using Microsoft.Azure.WebJobs.Host.Loggers;
 using Microsoft.Azure.WebJobs.Host.Protocols;
-using Microsoft.Azure.WebJobs.Host.Queues.Bindings;
 using Microsoft.Azure.WebJobs.Host.Queues.Listeners;
 using Microsoft.Azure.WebJobs.Host.Storage;
 using Microsoft.Azure.WebJobs.Host.Storage.Blob;
 using Microsoft.Azure.WebJobs.Host.Storage.Queue;
-using Microsoft.Azure.WebJobs.Host.Tables;
 using Microsoft.Azure.WebJobs.Host.Timers;
 using Microsoft.Azure.WebJobs.Host.Triggers;
 using Microsoft.Azure.WebJobs.Logging;
@@ -90,8 +85,6 @@ namespace Microsoft.Azure.WebJobs.Host.Executors
 
         public async Task<JobHostContext> Create(CancellationToken shutdownToken, CancellationToken cancellationToken)
         {
-            RegisterBuiltInExtensions();
-
             // Only testing will override these interfaces. 
             IHostInstanceLoggerProvider hostInstanceLoggerProvider = _serviceProvider.GetService<IHostInstanceLoggerProvider>();
             IFunctionInstanceLoggerProvider functionInstanceLoggerProvider = _serviceProvider.GetService<IFunctionInstanceLoggerProvider>();
@@ -232,44 +225,6 @@ namespace Microsoft.Azure.WebJobs.Host.Executors
                     listener,
                     _loggerFactory);
             }
-        }
-
-        private void RegisterBuiltInExtensions()
-        {
-            bool builtinsAdded = _extensions.GetExtensions<IExtensionConfigProvider>().OfType<TableExtension>().Any();
-
-            if (!builtinsAdded)
-            {
-                _extensions.RegisterExtension<IExtensionConfigProvider>(_serviceProvider.GetService<TableExtension>());
-                _extensions.RegisterExtension<IExtensionConfigProvider>(_serviceProvider.GetService<QueueExtension>());
-                _extensions.RegisterExtension<IExtensionConfigProvider>(_serviceProvider.GetService<BlobExtensionConfig>());
-                _extensions.RegisterExtension<IExtensionConfigProvider>(_serviceProvider.GetService<BlobTriggerExtensionConfig>());
-            }
-
-            IConverterManager converterManager = _serviceProvider.GetService<IConverterManager>();
-            IWebHookProvider webHookProvider = _serviceProvider.GetService<IWebHookProvider>();
-            ExtensionConfigContext context = new ExtensionConfigContext(converterManager, webHookProvider, _extensions)
-            {
-                Config = _jobHostOptions.Value
-            };
-            InvokeExtensionConfigProviders(context);
-        }
-
-        private void InvokeExtensionConfigProviders(ExtensionConfigContext context)
-        {
-            // TODO: Remove IExtensionRegistrty?
-            foreach (var extension in _serviceProvider.GetServices<IExtensionConfigProvider>())
-            {
-                _extensions.RegisterExtension<IExtensionConfigProvider>(extension);
-            }
-
-            IEnumerable<IExtensionConfigProvider> configProviders = _extensions.GetExtensions(typeof(IExtensionConfigProvider)).Cast<IExtensionConfigProvider>();
-            foreach (IExtensionConfigProvider configProvider in configProviders)
-            {
-                context.Current = configProvider;
-                configProvider.Initialize(context);
-            }
-            context.ApplyRules();
         }
 
         [SuppressMessage("Microsoft.Reliability", "CA2000:Dispose objects before losing scope")]

@@ -2,6 +2,7 @@
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
 using System;
+using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
 using System.Threading;
@@ -15,29 +16,37 @@ using Microsoft.Azure.WebJobs.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using Microsoft.WindowsAzure.Storage;
 using Xunit;
 
 namespace Microsoft.Azure.WebJobs.Host.TestCommon
 {
     public static class TestHelpers
     {
-        public static async Task Await(Func<Task<bool>> condition, int timeout = 60 * 1000, int pollingInterval = 2 * 1000)
+        public static Task Await(Func<bool> condition, int timeout = 60 * 1000, int pollingInterval = 2 * 1000, bool throwWhenDebugging = false, Func<string> userMessageCallback = null)
+        {
+            return Await(() => Task.FromResult(condition()), timeout, pollingInterval, throwWhenDebugging, userMessageCallback);
+        }
+
+        public static async Task Await(Func<Task<bool>> condition, int timeout = 60 * 1000, int pollingInterval = 2 * 1000, bool throwWhenDebugging = false, Func<string> userMessageCallback = null)
         {
             DateTime start = DateTime.Now;
             while (!await condition())
             {
                 await Task.Delay(pollingInterval);
 
-                if ((DateTime.Now - start).TotalMilliseconds > timeout)
+                bool shouldThrow = !Debugger.IsAttached || (Debugger.IsAttached && throwWhenDebugging);
+                if (shouldThrow && (DateTime.Now - start).TotalMilliseconds > timeout)
                 {
-                    throw new ApplicationException("Condition not reached within timeout.");
+                    string error = "Condition not reached within timeout.";
+                    if (userMessageCallback != null)
+                    {
+                        error += " " + userMessageCallback();
+                    }
+                    throw new ApplicationException(error);
                 }
             }
-        }
-
-        public static async Task Await(Func<bool> condition, int timeout = 60 * 1000, int pollingInterval = 2 * 1000)
-        {
-            await Await(() => Task.FromResult(condition()), timeout, pollingInterval);
         }
 
         public static void WaitOne(WaitHandle handle, int timeout = 60 * 1000)
@@ -124,6 +133,17 @@ namespace Microsoft.Azure.WebJobs.Host.TestCommon
         public static JobHost GetJobHost(this IHost host)
         {
             return host.Services.GetService<IJobHost>() as JobHost;
+        }
+
+        public static CloudStorageAccount GetStorageAccount(this IHost host)
+        {
+            var provider = host.Services.GetRequiredService<IStorageAccountProvider>();
+            return provider.GetStorageAccountAsync(CancellationToken.None).Result.SdkObject;
+        }
+
+        public static TOptions GetOptions<TOptions>(this IHost host) where TOptions : class, new()
+        {
+            return host.Services.GetService<IOptions<TOptions>>().Value;
         }
 
         public static JobHostOptions NewConfig<TProgram>(params object[] services)
@@ -273,6 +293,8 @@ namespace Microsoft.Azure.WebJobs.Host.TestCommon
             public string StorageConnectionString => throw new NotImplementedException();
 
             public string DashboardConnectionString => throw new NotImplementedException();
+
+            public string InternalSasStorage => throw new NotImplementedException();
 
             public Task<IStorageAccount> TryGetAccountAsync(string connectionStringName, CancellationToken cancellationToken)
             {

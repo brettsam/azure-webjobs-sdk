@@ -2,7 +2,6 @@
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
 using System;
-using System.Threading;
 using Microsoft.Azure.WebJobs.Host.Bindings;
 using Microsoft.Azure.WebJobs.Host.Executors;
 using Microsoft.Azure.WebJobs.Host.Indexers;
@@ -46,11 +45,10 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests
 
         private static IStorageAccountProvider GetStorageAccountProvider(CloudStorageAccount account)
         {
-            Mock<IServiceProvider> services = new Mock<IServiceProvider>(MockBehavior.Strict);
             StorageClientFactory clientFactory = new StorageClientFactory();
-            services.Setup(p => p.GetService(typeof(StorageClientFactory))).Returns(clientFactory);
-            IStorageAccount storageAccount = account != null ? new StorageAccount(account, services.Object) : null;
-            IStorageAccountProvider storageAccountProvider = new SimpleStorageAccountProvider(services.Object)
+
+            IStorageAccount storageAccount = account != null ? new StorageAccount(account, clientFactory) : null;
+            IStorageAccountProvider storageAccountProvider = new SimpleStorageAccountProvider(clientFactory)
             {
                 StorageAccount = account
             };

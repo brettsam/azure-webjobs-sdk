@@ -51,7 +51,7 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
         {
             _serviceBusConfig = new ServiceBusOptions();
             _nameResolver = new RandomNameResolver();
-            _secondaryConnectionString = AmbientConnectionStringProvider.Instance.GetConnectionString("ServiceBusSecondary");
+            // _secondaryConnectionString = AmbientConnectionStringProvider.Instance.GetConnectionString("ServiceBusSecondary");
 
             _loggerFactory.AddProvider(_loggerProvider);
         }

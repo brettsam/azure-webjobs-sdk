@@ -12,11 +12,11 @@ namespace Microsoft.Azure.WebJobs.Host.TestCommon
 {
     public class SimpleStorageAccountProvider : IStorageAccountProvider
     {
-        private readonly IServiceProvider _services;
+        private readonly StorageClientFactory _storageClientFactory;
 
-        public SimpleStorageAccountProvider(IServiceProvider services)
+        public SimpleStorageAccountProvider(StorageClientFactory storageClientFactory)
         {
-            _services = services;
+            _storageClientFactory = storageClientFactory;
         }
 
         public CloudStorageAccount StorageAccount { get; set; }
@@ -27,17 +27,19 @@ namespace Microsoft.Azure.WebJobs.Host.TestCommon
 
         public string DashboardConnectionString => throw new NotImplementedException();
 
+        public string InternalSasStorage => throw new NotImplementedException();
+
         Task<IStorageAccount> IStorageAccountProvider.TryGetAccountAsync(string connectionStringName, CancellationToken cancellationToken)
         {
             IStorageAccount account;
 
             if (connectionStringName == ConnectionStringNames.Dashboard)
             {
-                account = DashboardAccount != null ? new StorageAccount(DashboardAccount, _services) : null;
+                account = DashboardAccount != null ? new StorageAccount(DashboardAccount, _storageClientFactory) : null;
             }
             else if (connectionStringName == ConnectionStringNames.Storage)
             {
-                account = StorageAccount != null ? new StorageAccount(StorageAccount, _services) : null;
+                account = StorageAccount != null ? new StorageAccount(StorageAccount, _storageClientFactory) : null;
             }
             else
             {

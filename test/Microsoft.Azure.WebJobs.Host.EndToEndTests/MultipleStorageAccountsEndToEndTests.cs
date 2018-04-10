@@ -269,7 +269,7 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
 
                 // TODO: DI:
                 Account1 = CloudStorageAccount.Parse(null);//hostConfiguration.StorageConnectionString);
-                string secondaryConnectionString = AmbientConnectionStringProvider.Instance.GetConnectionString(Secondary);
+                string secondaryConnectionString = null; // AmbientConnectionStringProvider.Instance.GetConnectionString(Secondary);
                 Account2 = CloudStorageAccount.Parse(secondaryConnectionString);
 
                 await CleanContainers();

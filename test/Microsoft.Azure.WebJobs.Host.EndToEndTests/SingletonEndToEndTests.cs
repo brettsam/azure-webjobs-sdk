@@ -43,7 +43,7 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             CloudBlobClient blobClient = storageAccount.CreateCloudBlobClient();
             _lockDirectory = blobClient.GetContainerReference("azure-webjobs-hosts").GetDirectoryReference("locks");
 
-            string secondaryConnectionString = AmbientConnectionStringProvider.Instance.GetConnectionString(Secondary);
+            string secondaryConnectionString = null; // AmbientConnectionStringProvider.Instance.GetConnectionString(Secondary);
             storageAccount = CloudStorageAccount.Parse(secondaryConnectionString);
             blobClient = storageAccount.CreateCloudBlobClient();
             _secondaryLockDirectory = blobClient.GetContainerReference("azure-webjobs-hosts").GetDirectoryReference("locks");

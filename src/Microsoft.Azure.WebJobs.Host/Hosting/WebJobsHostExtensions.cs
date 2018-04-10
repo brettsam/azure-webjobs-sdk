@@ -3,6 +3,7 @@
 
 using System;
 using Microsoft.Azure.WebJobs.Host.Config;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
@@ -18,6 +19,12 @@ namespace Microsoft.Azure.WebJobs.Hosting
 
         public static IHostBuilder ConfigureWebJobsHost(this IHostBuilder builder, Action<JobHostOptions> configure)
         {
+            builder.ConfigureAppConfiguration(config =>
+            {
+                config.AddJsonFile("appsettings.json", optional: true);
+                config.AddEnvironmentVariables();
+            });
+
             builder.ConfigureServices((context, services) =>
             {
                 services.Configure<JobHostOptions>(context.Configuration);

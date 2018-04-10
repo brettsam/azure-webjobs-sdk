@@ -15,9 +15,6 @@ using Microsoft.Azure.WebJobs.Host.Indexers;
 using Microsoft.Azure.WebJobs.Host.Listeners;
 using Microsoft.Azure.WebJobs.Host.Storage;
 using Microsoft.Azure.WebJobs.Host.TestCommon;
-using Microsoft.Azure.WebJobs.Host.Timers;
-using Microsoft.Azure.WebJobs.Hosting;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -503,11 +500,9 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests
 
         private static JobHostOptions CreateConfiguration()
         {
-            Mock<IServiceProvider> services = new Mock<IServiceProvider>(MockBehavior.Strict);
             StorageClientFactory clientFactory = new StorageClientFactory();
-            services.Setup(p => p.GetService(typeof(StorageClientFactory))).Returns(clientFactory);
 
-            IStorageAccountProvider storageAccountProvider = new SimpleStorageAccountProvider(services.Object)
+            IStorageAccountProvider storageAccountProvider = new SimpleStorageAccountProvider(clientFactory)
             {
                 // Use null connection strings since unit tests shouldn't make wire requests.
                 StorageAccount = null,
@@ -563,6 +558,8 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests
             public string StorageConnectionString => throw new NotImplementedException();
 
             public string DashboardConnectionString => throw new NotImplementedException();
+
+            public string InternalSasStorage => throw new NotImplementedException();
 
             public Task<IStorageAccount> TryGetAccountAsync(string connectionStringName,
                 CancellationToken cancellationToken)

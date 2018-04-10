@@ -11,6 +11,7 @@ using Microsoft.Azure.WebJobs.Host.Executors;
 using Microsoft.Azure.WebJobs.Host.TestCommon;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 using Microsoft.WindowsAzure.Storage;
 using Microsoft.WindowsAzure.Storage.Blob;
 using Newtonsoft.Json.Linq;
@@ -197,7 +198,12 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             int timeToProcess;
 
             var prog = new BlobGetsProcessedOnlyOnce_SingleHost_Program();
-            var host = NewBuilder(prog).Build();
+            
+            // make sure they both have the same id
+            string hostId = Guid.NewGuid().ToString("N");
+            var host = NewBuilder(prog)
+                .ConfigureServices(services => services.Configure<JobHostOptions>(o => o.HostId = hostId))
+                .Build();           
 
             // Process the blob first
             using (prog._completedEvent = new ManualResetEvent(initialState: false))
@@ -267,8 +273,15 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                 .UploadTextAsync("10");
 
             var prog = new BlobGetsProcessedOnlyOnce_SingleHost_Program();
-            var host1 = NewBuilder(prog).Build();
-            var host2 = NewBuilder(prog).Build();
+
+            // make sure they both have the same id
+            string hostId = Guid.NewGuid().ToString("N");
+            var host1 = NewBuilder(prog)
+                .ConfigureServices(services => services.Configure<JobHostOptions>(o => o.HostId = hostId))
+                .Build();
+            var host2 = NewBuilder(prog)
+                .ConfigureServices(services => services.Configure<JobHostOptions>(o => o.HostId = hostId))
+                .Build();
 
             using (prog._completedEvent = new ManualResetEvent(initialState: false))
             using (host1)

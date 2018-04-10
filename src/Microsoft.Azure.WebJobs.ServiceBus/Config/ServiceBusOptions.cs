@@ -40,7 +40,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus
             {
                 if (!_connectionStringSet)
                 {
-                    _connectionString = AmbientConnectionStringProvider.Instance.GetConnectionString(ConnectionStringNames.ServiceBus);
+                    //_connectionString = AmbientConnectionStringProvider.Instance.GetConnectionString(ConnectionStringNames.ServiceBus);
                     _connectionStringSet = true;
                 }
 

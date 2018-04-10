@@ -8,6 +8,6 @@ namespace Microsoft.Azure.WebJobs.Host.Executors
 {
     internal interface IStorageAccountParser
     {
-        IStorageAccount ParseAccount(string connectionString, string connectionStringName, IServiceProvider services);
+        IStorageAccount ParseAccount(string connectionString, string connectionStringName);
     }
 }

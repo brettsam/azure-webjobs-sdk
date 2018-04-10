@@ -5,6 +5,9 @@ using System;
 using Microsoft.Azure.WebJobs.Host;
 using Microsoft.Azure.WebJobs.Host.Bindings;
 using Microsoft.Azure.WebJobs.Host.Blobs;
+using Microsoft.Azure.WebJobs.Host.Blobs.Bindings;
+using Microsoft.Azure.WebJobs.Host.Blobs.Triggers;
+using Microsoft.Azure.WebJobs.Host.Config;
 using Microsoft.Azure.WebJobs.Host.Configuration;
 using Microsoft.Azure.WebJobs.Host.Dispatch;
 using Microsoft.Azure.WebJobs.Host.Executors;
@@ -12,6 +15,8 @@ using Microsoft.Azure.WebJobs.Host.Indexers;
 using Microsoft.Azure.WebJobs.Host.Listeners;
 using Microsoft.Azure.WebJobs.Host.Loggers;
 using Microsoft.Azure.WebJobs.Host.Queues;
+using Microsoft.Azure.WebJobs.Host.Queues.Bindings;
+using Microsoft.Azure.WebJobs.Host.Tables;
 using Microsoft.Azure.WebJobs.Host.Timers;
 using Microsoft.Azure.WebJobs.Host.Triggers;
 using Microsoft.Azure.WebJobs.Logging;
@@ -46,7 +51,8 @@ namespace Microsoft.Azure.WebJobs
             // A LOT of the service registrations below need to be cleaned up
             // maintaining some of the existing dependencies and model we previously had, 
             // but this should be reviewed as it can be improved.
-            services.TryAddSingleton<IExtensionRegistry, DefaultExtensionRegistry>();
+            services.TryAddSingleton<IExtensionRegistryFactory, DefaultExtensionRegistryFactory>();
+            services.TryAddSingleton<IExtensionRegistry>(p => p.GetRequiredService<IExtensionRegistryFactory>().Create());
 
             // Type conversion
             services.TryAddSingleton<ITypeLocator, DefaultTypeLocator>();
@@ -81,8 +87,10 @@ namespace Microsoft.Azure.WebJobs
             services.TryAddSingleton<IWebJobsExceptionHandlerFactory, DefaultWebJobsExceptionHandlerFactory>();
             services.TryAddSingleton<IWebJobsExceptionHandler>(p => p.GetRequiredService<IWebJobsExceptionHandlerFactory>().Create(p.GetRequiredService<IHost>()));
 
-            // TODO: Remove passing the service provider here.
-            services.TryAddSingleton<IStorageAccountProvider>(p => new DefaultStorageAccountProvider(p));
+            services.TryAddSingleton<IStorageAccountProvider, DefaultStorageAccountProvider>();
+            services.TryAddSingleton<IConnectionStringProvider, AmbientConnectionStringProvider>();
+            services.TryAddSingleton<IStorageAccountParser, StorageAccountParser>();
+            services.TryAddSingleton<IStorageCredentialsValidator, DefaultStorageCredentialsValidator>();
             services.TryAddSingleton<StorageClientFactory>();
             services.TryAddSingleton<INameResolver, DefaultNameResolver>();
             services.TryAddSingleton<IJobActivator, DefaultJobActivator>();
@@ -90,6 +98,7 @@ namespace Microsoft.Azure.WebJobs
 
             // Options setup
             services.TryAddEnumerable(ServiceDescriptor.Transient<IConfigureOptions<JobHostOptions>, JobHostOptionsSetup>());
+            services.TryAddEnumerable(ServiceDescriptor.Transient<IConfigureOptions<JobHostInternalStorageOptions>, JobHostInternalStorageOptionsSetup>());
 
             services.RegisterBuiltInBindings();
 
@@ -123,10 +132,10 @@ namespace Microsoft.Azure.WebJobs
                 throw new ArgumentNullException(nameof(services));
             }
 
-            services.TryAddSingleton<Host.Tables.TableExtension>();
-            services.TryAddSingleton<Host.Queues.Bindings.QueueExtension>();
-            services.TryAddSingleton<Host.Blobs.Bindings.BlobExtensionConfig>();
-            services.TryAddSingleton<Host.Blobs.Triggers.BlobTriggerExtensionConfig>();
+            services.TryAddSingleton<IExtensionConfigProvider, TableExtension>();
+            services.TryAddSingleton<IExtensionConfigProvider, QueueExtension>();
+            services.TryAddSingleton<IExtensionConfigProvider, BlobExtensionConfig>();
+            services.TryAddSingleton<IExtensionConfigProvider, BlobTriggerExtensionConfig>();
 
             return services;
         }

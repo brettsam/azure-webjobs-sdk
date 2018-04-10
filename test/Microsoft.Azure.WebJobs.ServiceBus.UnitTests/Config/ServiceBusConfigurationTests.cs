@@ -1,7 +1,6 @@
 ﻿// Copyright (c) .NET Foundation. All rights reserved.
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
-using Microsoft.Azure.WebJobs.Host;
 using Xunit;
 
 namespace Microsoft.Azure.WebJobs.ServiceBus.UnitTests.Config
@@ -21,7 +20,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.UnitTests.Config
         {
             ServiceBusOptions config = new ServiceBusOptions();
 
-            string defaultConnection = AmbientConnectionStringProvider.Instance.GetConnectionString(ConnectionStringNames.ServiceBus);
+            string defaultConnection = null; // AmbientConnectionStringProvider.Instance.GetConnectionString(ConnectionStringNames.ServiceBus);
             Assert.Equal(defaultConnection, config.ConnectionString);
 
             string testConnection = "testconnection";

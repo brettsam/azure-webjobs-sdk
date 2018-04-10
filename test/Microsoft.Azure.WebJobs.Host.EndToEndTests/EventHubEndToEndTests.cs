@@ -7,27 +7,22 @@ using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 using Microsoft.Azure.EventHubs;
-using Microsoft.Azure.WebJobs.ServiceBus;
 using Microsoft.Azure.WebJobs.Host.TestCommon;
+using Microsoft.Azure.WebJobs.ServiceBus;
+using Microsoft.Extensions.Hosting;
 using Xunit;
-using Microsoft.Extensions.Options;
 
 namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
 {
     public class EventHubEndToEndTests : IDisposable
     {
-        private readonly JobHost _host;
+        private readonly IHost _host;
         private const string TestHubName = "webjobstesthub";
         private const string TestHub2Name = "webjobstesthub2";
         private const string TestHub2Connection = "AzureWebJobsTestHubConnection2";
 
         public EventHubEndToEndTests()
         {
-            var config = new JobHostOptions()
-            {
-                // TODO: DI:
-                //TypeLocator = new FakeTypeLocator(typeof(EventHubTestJobs))
-            };
             var eventHubConfig = new EventHubConfiguration();
 
             string connection = Environment.GetEnvironmentVariable("AzureWebJobsTestHubConnection");
@@ -38,8 +33,10 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             connection = Environment.GetEnvironmentVariable(TestHub2Connection);
             Assert.True(!string.IsNullOrEmpty(connection), "Required test connection string is missing.");
 
-            //config.UseEventHub(eventHubConfig);
-            JobHost host = new JobHost(new OptionsWrapper<JobHostOptions>(config), null);
+            _host = new HostBuilder()
+                .ConfigureDefaultTestHost<EventHubTestJobs>()
+                .AddEventHubs(eventHubConfig)
+                .Build();
 
             EventHubTestJobs.Result = null;
         }
@@ -51,10 +48,10 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
 
             try
             {
-                var method = typeof(EventHubTestJobs).GetMethod("SendEvent_TestHub", BindingFlags.Static | BindingFlags.Public);
+                var method = typeof(EventHubTestJobs).GetMethod(nameof(EventHubTestJobs.SendEvent_TestHub), BindingFlags.Static | BindingFlags.Public);
                 var id = Guid.NewGuid().ToString();
                 EventHubTestJobs.EventId = id;
-                await _host.CallAsync(method, new { input = id });
+                await _host.GetJobHost().CallAsync(method, new { input = id });
 
                 await TestHelpers.Await(() =>
                 {
@@ -74,11 +71,11 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
         {
             // send some events BEFORE starting the host, to ensure
             // the events are received in batch
-            var method = typeof(EventHubTestJobs).GetMethod("SendEvents_TestHub2", BindingFlags.Static | BindingFlags.Public);
+            var method = typeof(EventHubTestJobs).GetMethod(nameof(EventHubTestJobs.SendEvents_TestHub2), BindingFlags.Static | BindingFlags.Public);
             var id = Guid.NewGuid().ToString();
             EventHubTestJobs.EventId = id;
             int numEvents = 5;
-            await _host.CallAsync(method, new { numEvents = numEvents, input = id });
+            await _host.GetJobHost().CallAsync(method, new { numEvents = numEvents, input = id });
 
             try
             {
@@ -103,7 +100,7 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             _host?.Dispose();
         }
 
-        public static class EventHubTestJobs
+        public class EventHubTestJobs
         {
             public static string EventId;
             public static object Result { get; set; }
@@ -128,7 +125,7 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                 }
             }
 
-            public static void ProcessSingleEvent([EventHubTrigger(TestHubName)] string evt, 
+            public static void ProcessSingleEvent([EventHubTrigger(TestHubName)] string evt,
                 string partitionKey, DateTime enqueuedTimeUtc, IDictionary<string, object> properties,
                 IDictionary<string, object> systemProperties)
             {

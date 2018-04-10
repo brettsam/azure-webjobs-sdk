@@ -37,7 +37,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus
                     _connectionString = _config.ConnectionString;
                     if (_connectionProvider != null && !string.IsNullOrEmpty(_connectionProvider.Connection))
                     {
-                        _connectionString = AmbientConnectionStringProvider.Instance.GetConnectionString(_connectionProvider.Connection);
+                        // _connectionString = AmbientConnectionStringProvider.Instance.GetConnectionString(_connectionProvider.Connection);
                     }
 
                     if (string.IsNullOrEmpty(_connectionString))

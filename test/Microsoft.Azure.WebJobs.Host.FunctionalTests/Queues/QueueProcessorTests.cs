@@ -156,7 +156,7 @@ namespace Microsoft.Azure.WebJobs.Host.FunctionalTests
                 StorageClientFactory clientFactory = new StorageClientFactory();
                 services.Setup(p => p.GetService(typeof(StorageClientFactory))).Returns(clientFactory);
 
-                DefaultStorageAccountProvider accountProvider = new DefaultStorageAccountProvider(services.Object);
+                DefaultStorageAccountProvider accountProvider = null; // new DefaultStorageAccountProvider(services.Object);
                 var task = accountProvider.GetStorageAccountAsync(CancellationToken.None);
                 IStorageQueueClient client = task.Result.CreateQueueClient();
                 QueueClient = client.SdkObject;
