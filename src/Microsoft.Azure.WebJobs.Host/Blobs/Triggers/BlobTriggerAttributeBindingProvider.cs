@@ -9,7 +9,6 @@ using System.Threading.Tasks;
 using Microsoft.Azure.WebJobs.Host.Bindings;
 using Microsoft.Azure.WebJobs.Host.Config;
 using Microsoft.Azure.WebJobs.Host.Executors;
-using Microsoft.Azure.WebJobs.Host.Indexers;
 using Microsoft.Azure.WebJobs.Host.Listeners;
 using Microsoft.Azure.WebJobs.Host.Queues;
 using Microsoft.Azure.WebJobs.Host.Storage;
@@ -78,7 +77,7 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Triggers
             public async Task<T> ConvertAsync(Stream input, CancellationToken cancellationToken)
             {
                 using (StreamReader reader = new StreamReader(input))
-                {                    
+                {
                     string jsonString = await reader.ReadToEndAsync();
                     return JsonConvert.DeserializeObject<T>(jsonString);
                 }

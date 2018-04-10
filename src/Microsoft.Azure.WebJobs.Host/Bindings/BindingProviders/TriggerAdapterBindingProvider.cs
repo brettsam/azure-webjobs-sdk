@@ -191,7 +191,7 @@ namespace Microsoft.Azure.WebJobs.Host.Bindings
 
             public ParameterDescriptor ToParameterDescriptor()
             {
-                throw new NotImplementedException();
+                return new ParameterDescriptor();
             }
         }
     }

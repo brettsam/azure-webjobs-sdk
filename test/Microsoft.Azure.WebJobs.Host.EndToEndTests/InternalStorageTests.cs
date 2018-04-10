@@ -4,12 +4,14 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Microsoft.Azure.WebJobs.Host.Executors;
 using Microsoft.Azure.WebJobs.Host.TestCommon;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.WindowsAzure.Storage;
 using Microsoft.WindowsAzure.Storage.Blob;
+using Moq;
 using Xunit;
 
 namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
@@ -53,13 +55,22 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                     config.AddInMemoryCollection(new Dictionary<string, string>()
                     {
                             { "AzureWebJobsInternalSasBlobContainer", fakeSasUri },
-                            { "AzureWebJobsStorage", string.Empty},
-                            { "AzureWebJobsDashboard", string.Empty}
+                            { "AzureWebJobsStorage", null },
+                            { "AzureWebJobsDashboard", null }
                     });
                 })
                 .ConfigureServices(services =>
                 {
                     services.AddSingleton<IJobActivator>(activator);
+
+                    // TODO: We shouldn't have to do this, but our default parser
+                    //       does not allow for null Storage/Dashboard.
+                    var mockParser = new Mock<IStorageAccountParser>();
+                    mockParser
+                        .Setup(p => p.ParseAccount(null, It.IsAny<string>()))
+                        .Returns<string>(null);
+
+                    services.AddSingleton<IStorageAccountParser>(mockParser.Object);
                 })
                 .Build();
 

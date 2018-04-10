@@ -8,7 +8,7 @@ namespace Microsoft.Azure.WebJobs.Host
     /// <summary>
     /// Defines an interface for providing connection strings.
     /// </summary>
-    internal interface IConnectionStringProvider
+    public interface IConnectionStringProvider
     {
         /// <summary>
         /// Get the connection string for the specified name.

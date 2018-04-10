@@ -132,10 +132,10 @@ namespace Microsoft.Azure.WebJobs
                 throw new ArgumentNullException(nameof(services));
             }
 
-            services.TryAddSingleton<IExtensionConfigProvider, TableExtension>();
-            services.TryAddSingleton<IExtensionConfigProvider, QueueExtension>();
-            services.TryAddSingleton<IExtensionConfigProvider, BlobExtensionConfig>();
-            services.TryAddSingleton<IExtensionConfigProvider, BlobTriggerExtensionConfig>();
+            services.TryAddEnumerable(ServiceDescriptor.Singleton<IExtensionConfigProvider, TableExtension>());
+            services.TryAddEnumerable(ServiceDescriptor.Singleton<IExtensionConfigProvider, QueueExtension>());
+            services.TryAddEnumerable(ServiceDescriptor.Singleton<IExtensionConfigProvider, BlobExtensionConfig>());
+            services.TryAddEnumerable(ServiceDescriptor.Singleton<IExtensionConfigProvider, BlobTriggerExtensionConfig>());
 
             return services;
         }
