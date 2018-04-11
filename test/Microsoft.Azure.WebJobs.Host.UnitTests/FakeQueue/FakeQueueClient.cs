@@ -7,7 +7,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Azure.WebJobs.Host.Bindings;
 using Microsoft.Azure.WebJobs.Host.Config;
-using Microsoft.Azure.WebJobs.Host.Triggers;
 using Newtonsoft.Json.Linq;
 using Xunit;
 
@@ -18,13 +17,11 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests
     {
         private readonly INameResolver _nameResolver;
         private readonly IConverterManager _converterManager;
-        private readonly IExtensionRegistry _extensions;
 
-        public FakeQueueClient(IExtensionRegistry extensionRegistry, INameResolver nameResolver, IConverterManager converterManager)
+        public FakeQueueClient(INameResolver nameResolver, IConverterManager converterManager)
         {
             _nameResolver = nameResolver;
             _converterManager = converterManager;
-            _extensions = extensionRegistry;
         }
 
         public List<FakeQueueData> _items = new List<FakeQueueData>();
@@ -71,7 +68,8 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests
             rule.BindToInput<FakeQueueClient>(this);
 
             var triggerBindingProvider = new FakeQueueTriggerBindingProvider(this, _converterManager);
-            _extensions.RegisterExtension<ITriggerBindingProvider>(triggerBindingProvider);
+            context.AddBindingRule<FakeQueueTriggerAttribute>()
+                .BindToTrigger<FakeQueueData>(triggerBindingProvider);
         }
 
         private Task<object> ConvertPocoToFakeQueueMessage(object arg, Attribute attrResolved, ValueBindingContext context)

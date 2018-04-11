@@ -1,7 +1,6 @@
 ﻿// Copyright (c) .NET Foundation. All rights reserved.
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
-using System;
 using Microsoft.Azure.WebJobs.Host.Bindings;
 using Microsoft.Azure.WebJobs.Host.Executors;
 using Microsoft.Azure.WebJobs.Host.Indexers;
@@ -26,12 +25,32 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests
             IStorageAccountProvider storageAccountProvider = GetStorageAccountProvider(account);
 
             var config = TestHelpers.NewConfig(storageAccountProvider, nameResolver, extensionRegistry);
-            IServiceProvider services = null; // config.CreateStaticServices();
 
-            ITriggerBindingProvider triggerBindingProvider = services.GetService<ITriggerBindingProvider>();
-            IBindingProvider bindingProvider = services.GetService<IBindingProvider>();
-            IJobActivator activator = services.GetService<IJobActivator>();
-            extensionRegistry = services.GetService<IExtensionRegistry>();
+            IHost host = new HostBuilder()
+                .ConfigureDefaultTestHost()
+                .ConfigureServices(services =>
+                {
+                    if (storageAccountProvider != null)
+                    {
+                        services.AddSingleton<IStorageAccountProvider>(storageAccountProvider);
+                    }
+
+                    if (nameResolver != null)
+                    {
+                        services.AddSingleton<INameResolver>(nameResolver);
+                    }
+
+                    if (extensionRegistry != null)
+                    {
+                        services.AddSingleton<IExtensionRegistry>(extensionRegistry);
+                    }
+                })
+                .Build();
+
+            ITriggerBindingProvider triggerBindingProvider = host.Services.GetService<ITriggerBindingProvider>();
+            IBindingProvider bindingProvider = host.Services.GetService<IBindingProviderFactory>().Create();
+            IJobActivator activator = host.Services.GetService<IJobActivator>();
+            extensionRegistry = host.Services.GetService<IExtensionRegistry>();
 
             SingletonManager singletonManager = new SingletonManager();
             IWebJobsExceptionHandler exceptionHandler = new WebJobsExceptionHandler(new Mock<IHost>().Object);
@@ -39,6 +58,7 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests
 
             IFunctionExecutor executor = new FunctionExecutor(new NullFunctionInstanceLogger(), outputLoggerProvider, exceptionHandler, loggerFactory: loggerFactory);
 
+            // TODO: This should be using DI internally and not be so complicated to construct
             return new FunctionIndexer(triggerBindingProvider, bindingProvider, new DefaultJobActivator(), executor,
                 extensionRegistry, singletonManager, loggerFactory);
         }

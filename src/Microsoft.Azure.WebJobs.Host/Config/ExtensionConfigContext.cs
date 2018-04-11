@@ -14,7 +14,7 @@ namespace Microsoft.Azure.WebJobs.Host.Config
     /// </summary>
     public class ExtensionConfigContext : FluentConverterRules<Attribute, ExtensionConfigContext>
     {
-        
+
         // List of actions to flush from the fluent configuration. 
         private List<Action> _updates = new List<Action>();
 
@@ -23,27 +23,23 @@ namespace Microsoft.Azure.WebJobs.Host.Config
         private readonly IConverterManager _converterManager;
         private readonly IWebHookProvider _webHookProvider;
         private readonly IExtensionRegistry _extensionRegistry;
+        private readonly INameResolver _nameResolver;
 
-        public ExtensionConfigContext(IConverterManager converterManager, IWebHookProvider webHookProvider, IExtensionRegistry extensionRegistry)
+        public ExtensionConfigContext(INameResolver nameResolver, IConverterManager converterManager, IWebHookProvider webHookProvider, IExtensionRegistry extensionRegistry)
         {
             _converterManager = converterManager;
             _webHookProvider = webHookProvider;
             _extensionRegistry = extensionRegistry;
+            _nameResolver = nameResolver;
         }
 
         internal IExtensionConfigProvider Current { get; set; }
-
-        /// <summary>
-        /// Gets or sets the <see cref="JobHostOptions"/>.
-        /// </summary>
-        public JobHostOptions Config { get; set; }
-
 
         internal override ConverterManager ConverterManager
         {
             get
             {
-                return (ConverterManager) _converterManager;
+                return (ConverterManager)_converterManager;
             }
         }
 
@@ -70,7 +66,7 @@ namespace Microsoft.Azure.WebJobs.Host.Config
             if (!this._rules.TryGetValue(typeof(TAttribute), out temp))
             {
                 // Create and register
-                rule = new FluentBindingRule<TAttribute>(this.Config, _converterManager, _extensionRegistry);
+                rule = new FluentBindingRule<TAttribute>(_nameResolver, _converterManager, _extensionRegistry);
                 this._rules[typeof(TAttribute)] = rule;
 
                 _updates.Add(rule.ApplyRules);

@@ -32,10 +32,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.UnitTests.Config
             IBindingProvider[] bindingProviders = extensions.GetExtensions<IBindingProvider>().ToArray();
             Assert.Empty(bindingProviders);
 
-            ExtensionConfigContext context = new ExtensionConfigContext(null, null, null)
-            {
-                Config = config,
-            };
+            ExtensionConfigContext context = new ExtensionConfigContext(null, null, null, null);
 
             serviceBusExtensionConfig.Initialize(context);
 

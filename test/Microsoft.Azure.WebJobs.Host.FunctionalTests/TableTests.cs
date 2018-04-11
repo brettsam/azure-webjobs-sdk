@@ -3,25 +3,22 @@
 
 using System;
 using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Azure.WebJobs.Host.Bindings;
+using Microsoft.Azure.WebJobs.Host.Config;
 using Microsoft.Azure.WebJobs.Host.FunctionalTests.TestDoubles;
 using Microsoft.Azure.WebJobs.Host.Storage;
 using Microsoft.Azure.WebJobs.Host.Storage.Queue;
 using Microsoft.Azure.WebJobs.Host.Storage.Table;
-using Microsoft.Azure.WebJobs.Host.Tables;
 using Microsoft.Azure.WebJobs.Host.TestCommon;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 using Microsoft.WindowsAzure.Storage.Queue;
 using Microsoft.WindowsAzure.Storage.Table;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Xunit;
-using Microsoft.Azure.WebJobs.Host.Config;
-using Microsoft.Extensions.Options;
 
 namespace Microsoft.Azure.WebJobs.Host.FunctionalTests
 {
@@ -60,9 +57,12 @@ namespace Microsoft.Azure.WebJobs.Host.FunctionalTests
         public void Table_SingleOut_Supported()
         {
             IStorageAccount account = new FakeStorageAccount();
-            var host = TestHelpers.NewJobHost<BindToSingleOutProgram>(account);
 
-            host.Call("Run");
+            IHost host = new HostBuilder()
+             .ConfigureDefaultTestHost<BindToSingleOutProgram>(account)
+             .Build();
+
+            host.GetJobHost<BindToSingleOutProgram>().Call("Run");
 
             AssertStringProperty(account, "Property", "1234");
         }
@@ -84,9 +84,11 @@ namespace Microsoft.Azure.WebJobs.Host.FunctionalTests
         public void Table_ResolvedName()
         {
             IStorageAccount account = new FakeStorageAccount();
-            var host = TestHelpers.NewJobHost<BindToICollectorITableEntityResolvedTableProgram>(account);
+            IHost host = new HostBuilder()
+                .ConfigureDefaultTestHost<BindToICollectorITableEntityResolvedTableProgram>(account)
+                .Build();
 
-            host.Call("Run", new { t1 = "ZZ" });
+            host.GetJobHost<BindToICollectorITableEntityResolvedTableProgram>().Call("Run", new { t1 = "ZZ" });
 
             AssertStringProperty(account, "Property", "123", "TaZZ");
             AssertStringProperty(account, "Property", "456", "ZZxZZ");
@@ -112,7 +114,7 @@ namespace Microsoft.Azure.WebJobs.Host.FunctionalTests
             var config = TestHelpers.NewConfig(typeof(CustomTableBindingExtensionProgram), account, ext);
 
             ConverterManager cm = null; // (ConverterManager) config.GetService<IConverterManager>();
-                              
+
             var host = new JobHost<CustomTableBindingExtensionProgram>(new OptionsWrapper<JobHostOptions>(config), null);
             host.Call("Run"); // Act
 
@@ -191,7 +193,7 @@ namespace Microsoft.Azure.WebJobs.Host.FunctionalTests
             host.Call("Run");
 
             // Assert
-            AssertStringProperty(account, "ValueStr", expectedValue);            
+            AssertStringProperty(account, "ValueStr", expectedValue);
         }
 
         [Fact]

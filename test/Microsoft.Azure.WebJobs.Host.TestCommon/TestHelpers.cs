@@ -12,7 +12,6 @@ using Microsoft.Azure.WebJobs.Host.Executors;
 using Microsoft.Azure.WebJobs.Host.Indexers;
 using Microsoft.Azure.WebJobs.Host.Storage;
 using Microsoft.Azure.WebJobs.Host.Timers;
-using Microsoft.Azure.WebJobs.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -94,11 +93,6 @@ namespace Microsoft.Azure.WebJobs.Host.TestCommon
             Assert.True(false, "Invoker should have failed");
         }
 
-        public static JobHost<TProgram> NewJobHost<TProgram>(params object[] services)
-        {
-            return null;
-        }
-
         public static IHostBuilder ConfigureDefaultTestHost(this IHostBuilder builder, params Type[] types)
         {
             return builder.ConfigureWebJobsHost()
@@ -115,9 +109,24 @@ namespace Microsoft.Azure.WebJobs.Host.TestCommon
                });
         }
 
-        public static IHostBuilder ConfigureDefaultTestHost<TProgram>(this IHostBuilder builder)
+        public static IHostBuilder ConfigureDefaultTestHost<TProgram>(this IHostBuilder builder,
+            INameResolver nameResolver = null, IJobActivator activator = null)
         {
-            return builder.ConfigureDefaultTestHost(typeof(TProgram));
+            return builder.ConfigureDefaultTestHost(typeof(TProgram))
+                .ConfigureServices(services =>
+                {
+                    services.AddSingleton<IJobHost, JobHost<TProgram>>();
+
+                    if (nameResolver != null)
+                    {
+                        services.AddSingleton<INameResolver>(nameResolver);
+                    }
+
+                    if (activator != null)
+                    {
+                        services.AddSingleton<IJobActivator>(activator);
+                    }
+                });
         }
 
         public static TestLoggerProvider GetTestLoggerProvider(this IHost host)
@@ -133,6 +142,21 @@ namespace Microsoft.Azure.WebJobs.Host.TestCommon
         public static JobHost GetJobHost(this IHost host)
         {
             return host.Services.GetService<IJobHost>() as JobHost;
+        }
+
+        public static JobHost<TProgram> GetJobHost<TProgram>(this IHost host)
+        {
+            return host.Services.GetService<IJobHost>() as JobHost<TProgram>;
+        }
+
+        public static void Call<T>(this JobHost host, string methodName, object arguments)
+        {
+            host.Call(typeof(T).GetMethod(methodName), arguments);
+        }
+
+        public static void Call<T>(this JobHost host, string methodName)
+        {
+            host.Call(typeof(T).GetMethod(methodName));
         }
 
         public static CloudStorageAccount GetStorageAccount(this IHost host)

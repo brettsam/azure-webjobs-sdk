@@ -11,7 +11,6 @@ using Microsoft.Azure.WebJobs.Description;
 using Microsoft.Azure.WebJobs.Host.Config;
 using Microsoft.Azure.WebJobs.Host.Executors;
 using Microsoft.Azure.WebJobs.Host.TestCommon;
-using Microsoft.Azure.WebJobs.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
@@ -540,10 +539,14 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests.Common
             appSettings.Add("y", "123");
 
             IExtensionConfigProvider ext = prog;
-            var host = TestHelpers.NewJobHost<TConfig>(jobActivator, ext, appSettings);
+
+            IHost host = new HostBuilder()
+                .ConfigureDefaultTestHost<TConfig>(appSettings, jobActivator)
+                .AddExtension(ext)
+                .Build();
 
             ITest<TConfig> test = prog;
-            test.Test(host);
+            test.Test(host.GetJobHost<TConfig>());
         }
     }
 }

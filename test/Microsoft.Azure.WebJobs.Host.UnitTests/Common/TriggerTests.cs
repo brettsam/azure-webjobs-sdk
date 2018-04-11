@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Azure.WebJobs.Host.Config;
 using Microsoft.Azure.WebJobs.Host.TestCommon;
+using Microsoft.Extensions.Hosting;
 using Newtonsoft.Json;
 using Xunit;
 
@@ -316,7 +317,10 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests.Common
             var func1 = new TFunction();
             activator.Add(func1);
 
-            var host = TestHelpers.NewJobHost<TFunction>(client, activator);
+            IHost host = new HostBuilder()
+                .ConfigureDefaultTestHost<TFunction>(activator: activator)
+                .AddExtension(client)
+                .Build();
 
             foreach (var item in items)
             {
@@ -325,7 +329,7 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests.Common
 
             host.Start();
             TestHelpers.WaitOne(func1._stopEvent);
-            host.Stop();
+            host.StopAsync().GetAwaiter().GetResult();
 
             // Add any items sent using [FakeQueue(Prefix=...)]
             foreach (var kv in client._prefixedItems)

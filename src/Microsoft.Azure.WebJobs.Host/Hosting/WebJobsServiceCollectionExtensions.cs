@@ -97,7 +97,6 @@ namespace Microsoft.Azure.WebJobs
             services.TryAddSingleton<IFunctionEventCollectorFactory, FunctionEventCollectorFactory>();
 
             // Options setup
-            services.TryAddEnumerable(ServiceDescriptor.Transient<IConfigureOptions<JobHostOptions>, JobHostOptionsSetup>());
             services.TryAddEnumerable(ServiceDescriptor.Transient<IConfigureOptions<JobHostInternalStorageOptions>, JobHostInternalStorageOptionsSetup>());
 
             services.RegisterBuiltInBindings();

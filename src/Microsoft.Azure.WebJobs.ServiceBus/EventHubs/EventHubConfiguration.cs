@@ -5,17 +5,15 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
+using System.Threading.Tasks;
 using Microsoft.Azure.EventHubs;
 using Microsoft.Azure.EventHubs.Processor;
-using Microsoft.Azure.WebJobs.Host.Config;
 using Microsoft.Azure.WebJobs.Host.Bindings;
-using System.Threading.Tasks;
-using Newtonsoft.Json;
-using Microsoft.Extensions.Logging;
-using Microsoft.Azure.WebJobs.Logging;
-using Microsoft.Azure.WebJobs.Host;
+using Microsoft.Azure.WebJobs.Host.Config;
 using Microsoft.Azure.WebJobs.Host.Executors;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Newtonsoft.Json;
 
 namespace Microsoft.Azure.WebJobs.ServiceBus
 {
@@ -123,7 +121,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus
             {
                 throw new ArgumentNullException("client");
             }
-           
+
             _senders[eventHubName] = client;
         }
 
@@ -147,7 +145,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus
             if (string.IsNullOrWhiteSpace(sb.EntityPath))
             {
                 sb.EntityPath = eventHubName;
-            }            
+            }
 
             var client = EventHubClient.CreateFromConnectionString(sb.ToString());
             AddEventHubClient(eventHubName, client);
@@ -195,7 +193,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus
 
             this._receiverCreds[eventHubName] = new ReceiverCreds
             {
-                 EventHubConnectionString = receiverConnectionString
+                EventHubConnectionString = receiverConnectionString
             };
         }
 
@@ -226,11 +224,11 @@ namespace Microsoft.Azure.WebJobs.ServiceBus
                 StorageConnectionString = storageConnectionString
             };
         }
-        
+
         internal EventHubClient GetEventHubClient(string eventHubName, string connection)
         {
             EventHubClient client;
-            if (_senders.TryGetValue(eventHubName, out client))             
+            if (_senders.TryGetValue(eventHubName, out client))
             {
                 return client;
             }
@@ -278,9 +276,9 @@ namespace Microsoft.Azure.WebJobs.ServiceBus
                 EventProcessorHost host = new EventProcessorHost(
                     hostName: eventProcessorHostName,
                     eventHubPath: actualPath,
-                    consumerGroupName: consumerGroup, 
+                    consumerGroupName: consumerGroup,
                     eventHubConnectionString: sb.ToString(),
-                    storageConnectionString: storageConnectionString, 
+                    storageConnectionString: storageConnectionString,
                     leaseContainerName: LeaseContainerName,
                     storageBlobPrefix: blobPrefix);
 
@@ -310,7 +308,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus
                 return string.Format(CultureInfo.InvariantCulture, "::{0:X4}", ordinalValue);
             }
         }
-                
+
         // Escape a blob path.  
         // For diagnostics, we want human-readble strings that resemble the input. 
         // Inputs are most commonly alphanumeric with a fex extra chars (dash, underscore, dot). 
@@ -325,7 +323,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus
                 {
                     sb.Append(c);
                 }
-                else if (c == '-' || c == '_' || c == '.') 
+                else if (c == '-' || c == '_' || c == '.')
                 {
                     // Potentially common carahcters. 
                     sb.Append(c);
@@ -398,7 +396,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus
             // apply at config level (batchCheckpointFrequency)
             context.ApplyConfig(this, "eventHub");
 
-           _defaultStorageString = _accountProvider?.StorageConnectionString;
+            _defaultStorageString = _accountProvider?.StorageConnectionString;
 
             context
                 .AddConverter<string, EventData>(ConvertString2EventData)
@@ -408,14 +406,18 @@ namespace Microsoft.Azure.WebJobs.ServiceBus
                 .AddOpenConverter<OpenType.Poco, EventData>(ConvertPocoToEventData);
 
             // register our trigger binding provider
-            INameResolver nameResolver = context.Config.NameResolver;
+            INameResolver nameResolver = null; // context.Config.NameResolver;
+            if (nameResolver == null)
+            {
+                throw new Exception("fix this!");
+            }
             var triggerBindingProvider = new EventHubTriggerAttributeBindingProvider(nameResolver, _converterManager, this, _loggerFactory);
             context.AddBindingRule<EventHubTriggerAttribute>()
                 .BindToTrigger(triggerBindingProvider);
 
             // register our binding provider
             context.AddBindingRule<EventHubAttribute>()
-                .BindToCollector(BuildFromAttribute);           
+                .BindToCollector(BuildFromAttribute);
         }
 
         private IAsyncCollector<EventData> BuildFromAttribute(EventHubAttribute attribute)
@@ -424,16 +426,16 @@ namespace Microsoft.Azure.WebJobs.ServiceBus
             return new EventHubAsyncCollector(client);
         }
 
-        private static string ConvertEventData2String(EventData x) 
+        private static string ConvertEventData2String(EventData x)
             => Encoding.UTF8.GetString(ConvertEventData2Bytes(x));
 
-        private static EventData ConvertBytes2EventData(byte[] input) 
+        private static EventData ConvertBytes2EventData(byte[] input)
             => new EventData(input);
 
         private static byte[] ConvertEventData2Bytes(EventData input)
             => input.Body.Array;
 
-        private static EventData ConvertString2EventData(string input) 
+        private static EventData ConvertString2EventData(string input)
             => ConvertBytes2EventData(Encoding.UTF8.GetBytes(input));
 
         private static Task<object> ConvertPocoToEventData(object arg, Attribute attrResolved, ValueBindingContext context)

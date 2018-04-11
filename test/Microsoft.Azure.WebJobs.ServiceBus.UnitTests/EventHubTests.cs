@@ -9,8 +9,6 @@ using Microsoft.Azure.EventHubs;
 using Microsoft.Azure.EventHubs.Processor;
 using Microsoft.Azure.WebJobs.Host.Config;
 using Microsoft.Azure.WebJobs.Host.TestCommon;
-using Microsoft.Extensions.Logging;
-using Newtonsoft.Json.Linq;
 using Xunit;
 using static Microsoft.Azure.EventHubs.EventData;
 
@@ -218,9 +216,10 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.UnitTests
         public void InitializeFromHostMetadata()
         {
             var config = new EventHubConfiguration();
-            var context = new ExtensionConfigContext(null, null, null)
+            var context = new ExtensionConfigContext(null, null, null, null);
+            /*
             {
-                Config = new JobHostOptions()
+              //  Config = new JobHostOptions()
                 {
 #pragma warning disable CS0618 // Type or member is obsolete
                     // TODO: DI: Just remove?
@@ -238,6 +237,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.UnitTests
                     // },
                 },
             };
+            */
             // context.Config.AddService<ILoggerFactory>(new LoggerFactory());
             (config as IExtensionConfigProvider).Initialize(context);
 

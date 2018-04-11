@@ -109,7 +109,7 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
 
                 var config = new JobHostOptions()
                 {
-                    NameResolver = _nameResolver
+                    // NameResolver = _nameResolver
                     // TODO: DI:
                     //TypeLocator = new FakeTypeLocator(typeof(ServiceBusTestJobs)),
                     //LoggerFactory = _loggerFactory
@@ -143,7 +143,7 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
 
                 var config = new JobHostOptions()
                 {
-                    NameResolver = _nameResolver,
+                    // NameResolver = _nameResolver,
                     // TODO: DI:
                     //TypeLocator = new FakeTypeLocator(typeof(ServiceBusTestJobs))
                 };
@@ -210,7 +210,7 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
         {
             var config = new JobHostOptions()
             {
-                NameResolver = _nameResolver,
+                // NameResolver = _nameResolver,
                 // TODO: DI:
                 //TypeLocator = new FakeTypeLocator(jobContainerType),
                 //LoggerFactory = _loggerFactory

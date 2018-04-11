@@ -1,7 +1,6 @@
 ﻿// Copyright (c) .NET Foundation. All rights reserved.
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
-using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Azure.WebJobs.Host.Executors;
@@ -23,11 +22,11 @@ namespace Microsoft.Azure.WebJobs.Host.TestCommon
 
         public CloudStorageAccount DashboardAccount { get; set; }
 
-        public string StorageConnectionString => throw new NotImplementedException();
+        public string StorageConnectionString => null;
 
-        public string DashboardConnectionString => throw new NotImplementedException();
+        public string DashboardConnectionString => null;
 
-        public string InternalSasStorage => throw new NotImplementedException();
+        public string InternalSasStorage => null;
 
         Task<IStorageAccount> IStorageAccountProvider.TryGetAccountAsync(string connectionStringName, CancellationToken cancellationToken)
         {
