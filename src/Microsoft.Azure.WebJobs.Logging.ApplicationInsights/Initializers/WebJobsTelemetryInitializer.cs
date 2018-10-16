@@ -103,7 +103,9 @@ namespace Microsoft.Azure.WebJobs.Logging.ApplicationInsights
                     foreach (var tag in currentActivity.Tags)
                     {
                         // Apply well-known tags and custom properties                        
-                        if (!TryApplyProperty(request, tag))
+                        if (!TryApplyProperty(request, tag) &&
+                            !tag.Key.StartsWith("w3c_") &&
+                            !tag.Key.StartsWith("ai_")))
                         {
                             request.Properties[tag.Key] = tag.Value;
                         }

@@ -77,8 +77,19 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests.ApplicationInsights
             var sbTriggerRequest = requests.Single(r => r.Name == nameof(ServiceBusTrigger));
             var manualCallRequest = requests.Single(r => r.Name == nameof(ServiceBusOut));
 
-            string operationId = manualCallRequest.Context.Operation.Id;
-            Assert.Equal(operationId, sbTriggerRequest.Context.Operation.Id);
+            string manualOperationId = manualCallRequest.Context.Operation.Id;
+            string triggerOperationId = sbTriggerRequest.Context.Operation.Id;
+
+            // currently ApplicationInsights supports 2 parallel correlation schemes:
+            // legacy and W3C, they both appear in telemetry. UX handles all differences in operation Ids. 
+            // This will be resolved in next .NET SDK on Activity level
+            string dependencyLegacyId = sbOutDependency.Properties.Single(p => p.Key == "ai_legacyRequestId").Value;
+            string triggerCallLegacyRootId = sbTriggerRequest.Properties.Single(p => p.Key == "ai_legacyRootId").Value;
+            string manualCallLegacyRootId = manualCallRequest.Properties.Single(p => p.Key == "ai_legacyRootId").Value;
+
+            Assert.Equal(sbTriggerRequest.Context.Operation.ParentId, dependencyLegacyId);
+            Assert.Equal(manualOperationId, sbOutDependency.Context.Operation.Id);
+            Assert.Equal(manualCallLegacyRootId, triggerCallLegacyRootId);
 
             ValidateServiceBusDependency(sbOutDependency, _endpoint, _queueName, "Send", nameof(ServiceBusOut), operationId, manualCallRequest.Id);
             ValidateServiceBusRequest(sbTriggerRequest, success, _endpoint, _queueName, nameof(ServiceBusTrigger), operationId, sbOutDependency.Id);

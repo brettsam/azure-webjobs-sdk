@@ -114,7 +114,7 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests.ApplicationInsights
             }
 
 
-            // PUT conatiner, HEAD blob, PUT lease, PUT content
+            // PUT container, HEAD blob, PUT lease, PUT content
             // since there could be failures and retries, we should expect more
             Assert.True(outDependencies.Count <= 4);
 
@@ -278,7 +278,7 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests.ApplicationInsights
             using (HttpClient httpClient = new HttpClient())
             {
                 // we don't really care about the result, so, we'll ignore all errors
-                await httpClient.GetAsync("http://microsoft.com").ContinueWith(t => { });
+                await httpClient.GetAsync("http://microsoft.com/").ContinueWith(t => { });
             }
             _functionWaitHandle.Set();
         }
