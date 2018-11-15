@@ -411,7 +411,67 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
 
                 Assert.Equal(_expectedUrl, functionRequest.Url);
                 Assert.Equal(HttpMethod.Get.ToString(), functionRequest.Properties[LogConstants.HttpMethodKey]);
-                Assert.Equal(_expectedResponseCode.ToString(), functionRequest.ResponseCode);
+
+                // Make sure operation ids match
+                var traces = _channel.Telemetries.OfType<TraceTelemetry>()
+                    .Where(t => t.Context.Operation.Id == functionRequest.Context.Operation.Id);
+                Assert.Equal(success ? 4 : 5, traces.Count());
+            }
+        }
+
+        [Theory]
+        [InlineData(nameof(TestApplicationInsightsInformation), true)]
+        [InlineData(nameof(TestApplicationInsightsFailure), false)]
+        public async Task ApplicationInsights_HttpRequestTracking_Override(string testName, bool success)
+        {
+            // In Functions, some functions are invoked via the portal and we do *not* want them
+            // tracked as real HttpRequests in that scenario. So we need to set a scope that tells
+            // the function to instead manually start its own telemetry and ignore the current Activity.
+            var client = _factory.CreateClient();
+
+            using (IHost host = ConfigureHost())
+            {
+                Startup.Host = host;
+                await host.StartAsync();
+
+                var request = new HttpRequestMessage(HttpMethod.Get, $"/some/path?name={testName}&override");
+                request.Headers.Add("traceparent", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01");
+
+                await client.SendAsync(request);
+
+                await host.StopAsync();
+
+                // Validate the request
+                // There must be only one reported by the AppInsights request collector
+                // The telemetry may come back slightly later, so wait until we see it
+                RequestTelemetry functionRequest = null;
+                await TestHelpers.Await(() =>
+                {
+                    functionRequest = _channel.Telemetries.OfType<RequestTelemetry>().SingleOrDefault();
+                    return functionRequest != null;
+                });
+
+                Assert.True(double.TryParse(functionRequest.Properties[LogConstants.FunctionExecutionTimeKey], out double functionDuration));
+                Assert.True(functionRequest.Duration.TotalMilliseconds >= functionDuration);
+
+                // Make sure it gets its own unique operation id
+                Assert.NotEqual("4bf92f3577b34da6a3ce929d0e0e4736", functionRequest.Context.Operation.Id);
+
+                ValidateRequest(
+                    functionRequest,
+                    testName,
+                    success,
+                    "0",
+                    functionRequest.Context.Operation.Id,
+                    "|4bf92f3577b34da6a3ce929d0e0e4736.00f067aa0ba902b7.");
+
+                Assert.Null(functionRequest.Url);
+                Assert.DoesNotContain(functionRequest.Properties, p => p.Key == LogConstants.HttpMethodKey);
+
+                // Make sure operation ids match
+                var traces = _channel.Telemetries.OfType<TraceTelemetry>()
+                    .Where(t => t.Context.Operation.Id == functionRequest.Context.Operation.Id);
+                Assert.Equal(success ? 3 : 4, traces.Count());
             }
         }
 
@@ -898,9 +958,32 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                 {
                     MethodInfo methodInfo = typeof(ApplicationInsightsEndToEndTests).GetMethod(context.Request.Query["name"], BindingFlags.Public | BindingFlags.Static);
 
+                    Task invokeFunction()
+                    {
+                        return Host.GetJobHost().CallAsync(methodInfo, new { input = "input" });
+                    }
+
                     try
                     {
-                        await Host.GetJobHost().CallAsync(methodInfo, new { input = "input" });
+                        var overrideTracking = context.Request.Query["override"].Count > 0;
+                        if (overrideTracking)
+                        {
+                            Task ignore = Task.Run(async () =>
+                            {
+                                ILogger logger = Host.Services.GetService<ILogger<Startup>>();
+                                using (logger.BeginScope(new Dictionary<string, object>
+                                {
+                                    { "MS_OverrideAutoTracking", "true" }
+                                }))
+                                {
+                                    await invokeFunction();
+                                }
+                            });
+                        }
+                        else
+                        {
+                            await invokeFunction();
+                        }
                     }
                     catch
                     {
