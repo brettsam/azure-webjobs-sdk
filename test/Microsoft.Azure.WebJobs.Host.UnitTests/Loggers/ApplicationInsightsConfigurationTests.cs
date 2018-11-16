@@ -71,10 +71,6 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests.Loggers
                 Assert.Single(sdkVersionProvider);
                 Assert.Single(sdkVersionProvider.OfType<WebJobsSdkVersionProvider>());
 
-                var sdkVersionProvider = host.Services.GetServices<ISdkVersionProvider>().ToList();
-                Assert.Single(sdkVersionProvider);
-                Assert.Single(sdkVersionProvider.OfType<WebJobsSdkVersionProvider>());
-
                 // Verify Channel
                 Assert.IsType<ServerTelemetryChannel>(config.TelemetryChannel);
 
@@ -173,7 +169,7 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests.Loggers
                 Assert.False(requestModule.CollectionOptions.TrackExceptions);
             }
         }
-        
+
         [Fact]
         public void DependencyInjectionConfiguration_ConfiguresQuickPulseAuthApiKey()
         {

@@ -102,10 +102,11 @@ namespace Microsoft.Azure.WebJobs.Logging.ApplicationInsights
                 {
                     foreach (var tag in currentActivity.Tags)
                     {
-                        // Apply well-known tags and custom properties                        
+                        // Apply well-known tags and custom properties, 
+                        // but ignore internal ai tags
                         if (!TryApplyProperty(request, tag) &&
                             !tag.Key.StartsWith("w3c_") &&
-                            !tag.Key.StartsWith("ai_")))
+                            !tag.Key.StartsWith("ai_"))
                         {
                             request.Properties[tag.Key] = tag.Value;
                         }
@@ -145,6 +146,23 @@ namespace Microsoft.Azure.WebJobs.Logging.ApplicationInsights
             if (string.IsNullOrEmpty(request.ResponseCode))
             {
                 request.ResponseCode = "0";
+            }
+
+            // If the Url is not null, it's an actual HttpRequest, as opposed to a
+            // Service Bus or other function invocation that we're tracking as a Request
+            if (request.Url != null)
+            {
+                // We don't want to include the query string in URLs
+                request.Url = new Uri(request.Url.GetLeftPart(UriPartial.Path));
+
+                // App Insights sets this as 'VERB /url/path'. We want to extract the VERB. 
+                // Only do this if HttpMethod is not already set.
+                string httpMethod = request.Name?.Split(' ').FirstOrDefault();
+                if (!string.IsNullOrEmpty(httpMethod) &&
+                    !request.Properties.ContainsKey(LogConstants.HttpMethodKey))
+                {
+                    request.Properties[LogConstants.HttpMethodKey] = httpMethod;
+                }
             }
         }
 
