@@ -433,7 +433,8 @@ namespace Microsoft.Azure.WebJobs.Logging.ApplicationInsights
             // In such case a current Activity is present.
             // We won't track and only stamp function specific details on the RequestTelemtery
             // created by SDK via Activity when function ends
-            if (Activity.Current == null)
+            if (Activity.Current == null ||
+                DictionaryLoggerScope.GetMergedStateDictionary().ContainsKey("MS_IgnoreActivity"))
             {
                 string functionName = stateValues.GetValueOrDefault<string>(ScopeKeys.FunctionName);
                 string functionInvocationId = stateValues.GetValueOrDefault<string>(ScopeKeys.FunctionInvocationId);
