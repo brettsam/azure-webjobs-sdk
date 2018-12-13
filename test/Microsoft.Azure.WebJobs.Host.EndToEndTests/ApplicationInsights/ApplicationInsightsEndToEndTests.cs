@@ -471,7 +471,7 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                 // Make sure operation ids match
                 var traces = _channel.Telemetries.OfType<TraceTelemetry>()
                     .Where(t => t.Context.Operation.Id == functionRequest.Context.Operation.Id);
-                Assert.Equal(success ? 3 : 4, traces.Count());
+                Assert.Equal(success ? 4 : 5, traces.Count());
             }
         }
 
@@ -973,7 +973,7 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                                 ILogger logger = Host.Services.GetService<ILogger<Startup>>();
                                 using (logger.BeginScope(new Dictionary<string, object>
                                 {
-                                    { "MS_OverrideAutoTracking", "true" }
+                                    { "MS_IgnoreActivity", null }
                                 }))
                                 {
                                     await invokeFunction();

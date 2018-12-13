@@ -97,10 +97,6 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests.ApplicationInsights
 
             ValidateServiceBusDependency(sbOutDependency, _endpoint, _queueName, "Send", nameof(ServiceBusOut), manualOperationId, manualCallRequest.Id);
             ValidateServiceBusRequest(sbTriggerRequest, success, _endpoint, _queueName, nameof(ServiceBusTrigger), triggerOperationId, dependencyLegacyId);
-
-            // Make sure that the trigger traces are correlated
-            var traces = _channel.Telemetries.OfType<TraceTelemetry>().Where(t => t.Context.Operation.Id == triggerOperationId);
-            Assert.Equal(success ? 6 : 8, traces.Count());
         }
 
         [Fact]
@@ -136,7 +132,7 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests.ApplicationInsights
             ValidateServiceBusRequest(request, true, _endpoint, _queueName, nameof(ServiceBusTrigger), null, null);
 
             // Make sure that the trigger traces are correlated
-            var traces = _channel.Telemetries.OfType<TraceTelemetry>().Where(t => t.Context.Operation.Id == request.Context.Operation.Id);
+            traces = _channel.Telemetries.OfType<TraceTelemetry>().Where(t => t.Context.Operation.Id == request.Context.Operation.Id).ToList();
             Assert.Equal(4, traces.Count());
         }
 
