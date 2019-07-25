@@ -8,5 +8,6 @@ namespace Microsoft.Azure.WebJobs.Host
         public const string WebJobsConfigurationSectionName = "AzureWebJobs";
         public const string EnvironmentSettingName = "AzureWebJobsEnv";
         public const string DevelopmentEnvironmentValue = "Development";
+        public const string DateTimeFormatString = "yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fffK";
     }
 }

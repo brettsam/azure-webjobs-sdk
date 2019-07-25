@@ -9,7 +9,7 @@ using Microsoft.Azure.WebJobs.Host.Blobs;
 using Microsoft.Azure.WebJobs.Host.Blobs.Listeners;
 using Microsoft.Azure.WebJobs.Host.Executors;
 using Microsoft.Azure.WebJobs.Host.TestCommon;
-using Microsoft.WindowsAzure.Storage;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.WindowsAzure.Storage.Blob;
 using Microsoft.WindowsAzure.Storage.Queue;
 using Moq;
@@ -262,7 +262,7 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests.Blobs.Listeners
             // Assert
             Assert.False(task.Result.Succeeded);
         }
-                
+
         private static IBlobWrittenWatcher CreateDummyBlobWrittenWatcher()
         {
             return new Mock<IBlobWrittenWatcher>(MockBehavior.Strict).Object;
@@ -327,7 +327,7 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests.Blobs.Listeners
         private static BlobQueueTriggerExecutor CreateProductUnderTest(
              IBlobCausalityReader causalityReader, IBlobWrittenWatcher blobWrittenWatcher)
         {
-            return new BlobQueueTriggerExecutor(causalityReader, blobWrittenWatcher);
+            return new BlobQueueTriggerExecutor(causalityReader, blobWrittenWatcher, NullLogger<BlobListener>.Instance);
         }
 
         private static IBlobCausalityReader CreateStubCausalityReader()

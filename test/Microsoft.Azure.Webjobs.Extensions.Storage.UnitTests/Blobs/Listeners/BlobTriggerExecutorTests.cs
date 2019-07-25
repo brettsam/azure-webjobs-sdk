@@ -9,7 +9,7 @@ using Microsoft.Azure.WebJobs.Host.Blobs.Listeners;
 using Microsoft.Azure.WebJobs.Host.Executors;
 using Microsoft.Azure.WebJobs.Host.Listeners;
 using Microsoft.Azure.WebJobs.Host.TestCommon;
-using Microsoft.WindowsAzure.Storage;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.WindowsAzure.Storage.Blob;
 using Moq;
 using Xunit;
@@ -346,7 +346,7 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests.Blobs.Listeners
             Mock<IBlobTriggerQueueWriter> queueWriterMock = new Mock<IBlobTriggerQueueWriter>(MockBehavior.Strict);
             queueWriterMock
                 .Setup(w => w.EnqueueAsync(It.IsAny<BlobTriggerMessage>(), It.IsAny<CancellationToken>()))
-                .Returns(Task.FromResult(0));
+                .Returns(Task.FromResult<(string, string)>((null, null)));
             IBlobTriggerQueueWriter queueWriter = queueWriterMock.Object;
 
             ITriggerExecutor<ICloudBlob> product = CreateProductUnderTest(expectedFunctionId, input, eTagReader,
@@ -441,7 +441,7 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests.Blobs.Listeners
         private static BlobTriggerExecutor CreateProductUnderTest(string functionId, IBlobPathSource input,
             IBlobETagReader eTagReader, IBlobReceiptManager receiptManager, IBlobTriggerQueueWriter queueWriter)
         {
-            return new BlobTriggerExecutor(String.Empty, functionId, input, eTagReader, receiptManager, queueWriter);
+            return new BlobTriggerExecutor(String.Empty, functionId, input, eTagReader, receiptManager, queueWriter, NullLogger<BlobListener>.Instance);
         }
 
         private static Mock<IBlobReceiptManager> CreateReceiptManagerReferenceMock()

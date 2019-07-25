@@ -8,6 +8,8 @@ using System.Threading.Tasks;
 using Microsoft.Azure.WebJobs.Host.Executors;
 using Microsoft.Azure.WebJobs.Host.Listeners;
 using Microsoft.Azure.WebJobs.Host.Protocols;
+using Microsoft.Azure.WebJobs.Host.Queues.Listeners;
+using Microsoft.Extensions.Logging;
 using Microsoft.WindowsAzure.Storage;
 using Microsoft.WindowsAzure.Storage.Blob;
 using Microsoft.WindowsAzure.Storage.Queue;
@@ -15,22 +17,24 @@ using Newtonsoft.Json;
 
 namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
 {
-    internal class BlobQueueTriggerExecutor : ITriggerExecutor<CloudQueueMessage>
+    internal partial class BlobQueueTriggerExecutor : ITriggerExecutor<CloudQueueMessage>
     {
         private readonly IBlobCausalityReader _causalityReader;
         private readonly IBlobWrittenWatcher _blobWrittenWatcher;
         private readonly ConcurrentDictionary<string, BlobQueueRegistration> _registrations;
+        private readonly ILogger<BlobListener> _logger;
 
-        public BlobQueueTriggerExecutor(IBlobWrittenWatcher blobWrittenWatcher)
-            : this(BlobCausalityReader.Instance, blobWrittenWatcher)
+        public BlobQueueTriggerExecutor(IBlobWrittenWatcher blobWrittenWatcher, ILogger<BlobListener> logger)
+            : this(BlobCausalityReader.Instance, blobWrittenWatcher, logger)
         {
         }
 
-        public BlobQueueTriggerExecutor(IBlobCausalityReader causalityReader, IBlobWrittenWatcher blobWrittenWatcher)
+        public BlobQueueTriggerExecutor(IBlobCausalityReader causalityReader, IBlobWrittenWatcher blobWrittenWatcher, ILogger<BlobListener> logger)
         {
             _causalityReader = causalityReader;
             _blobWrittenWatcher = blobWrittenWatcher;
             _registrations = new ConcurrentDictionary<string, BlobQueueRegistration>();
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
         public bool TryGetRegistration(string functionId, out BlobQueueRegistration registration)
@@ -61,9 +65,9 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
 
             // Ensure that the function ID is still valid. Otherwise, ignore this message.
             FunctionResult successResult = new FunctionResult(true);
-            BlobQueueRegistration registration;
-            if (!_registrations.TryGetValue(functionId, out registration))
+            if (!_registrations.TryGetValue(functionId, out BlobQueueRegistration registration))
             {
+                Logger.FunctionNotFound(_logger, message.BlobName, functionId, value.Id);
                 return successResult;
             }
 
@@ -79,14 +83,15 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
             catch (StorageException exception) when (exception.IsNotFound() || exception.IsOk())
             {
                 // If the blob no longer exists, just ignore this message.
-                return successResult;                
+                Logger.BlobNotFound(_logger, blobName, value.Id);
+                return successResult;
             }
 
             // Ensure the blob still exists with the same ETag.
             string possibleETag = blob.Properties.ETag; // set since we fetched from server
 
             // If the blob still exists but the ETag is different, delete the message but do a fast path notification.
-            if (!String.Equals(message.ETag, possibleETag, StringComparison.Ordinal))
+            if (!string.Equals(message.ETag, possibleETag, StringComparison.Ordinal))
             {
                 _blobWrittenWatcher.Notify(blob);
                 return successResult;
@@ -98,7 +103,8 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
             TriggeredFunctionData input = new TriggeredFunctionData
             {
                 ParentId = parentId,
-                TriggerValue = blob
+                TriggerValue = blob,
+                TriggerDetails = QueueTriggerExecutor.PopulateTriggerDetails(value)
             };
 
             return await registration.Executor.TryExecuteAsync(input, cancellationToken);

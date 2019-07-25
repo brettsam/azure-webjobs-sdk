@@ -88,7 +88,7 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
             SharedQueueWatcher sharedQueueWatcher = _messageEnqueuedWatcherSetter;
 
             SharedBlobListener sharedBlobListener = _sharedContextProvider.GetOrCreateInstance<SharedBlobListener>(
-                new SharedBlobListenerFactory(hostId, _hostAccount, _exceptionHandler, _blobWrittenWatcherSetter));
+                new SharedBlobListenerFactory(hostId, _hostAccount, _exceptionHandler, _blobWrittenWatcherSetter, _loggerFactory.CreateLogger<BlobListener>()));
 
             // Register the blob container we wish to monitor with the shared blob listener.
             await RegisterWithSharedBlobListenerAsync(hostId, sharedBlobListener, primaryBlobClient,
@@ -151,7 +151,7 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
         {
             BlobTriggerExecutor triggerExecutor = new BlobTriggerExecutor(hostId, _functionDescriptor.Id, _input,
                 BlobETagReader.Instance, new BlobReceiptManager(blobClient),
-                new BlobTriggerQueueWriter(hostBlobTriggerQueue, messageEnqueuedWatcher));
+                new BlobTriggerQueueWriter(hostBlobTriggerQueue, messageEnqueuedWatcher), _loggerFactory.CreateLogger<BlobListener>());
 
             await sharedBlobListener.RegisterAsync(_container, triggerExecutor, cancellationToken);
         }

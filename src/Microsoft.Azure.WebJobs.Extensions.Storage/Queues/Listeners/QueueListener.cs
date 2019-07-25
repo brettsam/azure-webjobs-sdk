@@ -154,6 +154,8 @@ namespace Microsoft.Azure.WebJobs.Host.Queues.Listeners
             }
 
             IEnumerable<CloudQueueMessage> batch = null;
+            string clientRequestId = Guid.NewGuid().ToString();
+            Stopwatch sw = null;
             try
             {
                 if (!_queueExists.HasValue || !_queueExists.Value)
@@ -169,8 +171,8 @@ namespace Microsoft.Azure.WebJobs.Host.Queues.Listeners
 
                 if (_queueExists.Value)
                 {
-                    Stopwatch sw = Stopwatch.StartNew();
-                    OperationContext context = new OperationContext { ClientRequestID = Guid.NewGuid().ToString() };
+                    sw = Stopwatch.StartNew();
+                    OperationContext context = new OperationContext { ClientRequestID = clientRequestId };
 
                     batch = await _queue.GetMessagesAsync(_queueProcessor.BatchSize,
                         _visibilityTimeout,
@@ -178,7 +180,7 @@ namespace Microsoft.Azure.WebJobs.Host.Queues.Listeners
                         operationContext: context,
                         cancellationToken: cancellationToken);
 
-                    Logger.GetMessages(_logger, _functionDescriptor.LogName, _queue.Name, context.ClientRequestID, batch.Count(), sw.ElapsedMilliseconds);
+                    Logger.GetMessages(_logger, _functionDescriptor.LogName, _queue.Name, clientRequestId, batch.Count(), sw.ElapsedMilliseconds);
                 }
             }
             catch (StorageException exception)
@@ -192,6 +194,9 @@ namespace Microsoft.Azure.WebJobs.Host.Queues.Listeners
                     exception.IsConflictQueueBeingDeletedOrDisabled() ||
                     exception.IsServerSideError())
                 {
+                    long pollLatency = sw?.ElapsedMilliseconds ?? -1;
+                    Logger.HandlingStorageException(_logger, _functionDescriptor.LogName, _queue.Name, clientRequestId, pollLatency, exception);
+
                     // Back off when no message is available, or when
                     // transient errors occur
                     return CreateBackoffResult();
