@@ -3,6 +3,7 @@
 
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Azure.WebJobs.Host.Executors;
@@ -100,11 +101,25 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
             // If the blob still exists and its ETag is still valid, execute.
             // Note: it's possible the blob could change/be deleted between now and when the function executes.
             Guid? parentId = await _causalityReader.GetWriterAsync(blob, cancellationToken);
+
+            // Include the queue details here.
+            IDictionary<string, string> details = QueueTriggerExecutor.PopulateTriggerDetails(value);
+
+            if (blob?.Properties?.Created.Value != null)
+            {
+                details[nameof(CloudBlob.Properties.Created)] = blob.Properties.Created.Value.ToString(Constants.DateTimeFormatString);
+            }
+
+            if (blob?.Properties?.LastModified.Value != null)
+            {
+                details[nameof(CloudBlob.Properties.LastModified)] = blob.Properties.LastModified.Value.ToString(Constants.DateTimeFormatString);
+            }
+
             TriggeredFunctionData input = new TriggeredFunctionData
             {
                 ParentId = parentId,
                 TriggerValue = blob,
-                TriggerDetails = QueueTriggerExecutor.PopulateTriggerDetails(value)
+                TriggerDetails = details
             };
 
             return await registration.Executor.TryExecuteAsync(input, cancellationToken);
