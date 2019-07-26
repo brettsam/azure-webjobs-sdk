@@ -288,7 +288,7 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                Logger.ProcessBlob(_logger, clientRequestId, blob.Name);
+                Logger.ProcessingBlob(_logger, clientRequestId, blob.Name);
 
                 FunctionResult result = await registration.ExecuteAsync(blob, cancellationToken);
                 if (!result.Succeeded)

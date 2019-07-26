@@ -2,6 +2,7 @@
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Azure.WebJobs.Host.Blobs;
@@ -9,7 +10,7 @@ using Microsoft.Azure.WebJobs.Host.Blobs.Listeners;
 using Microsoft.Azure.WebJobs.Host.Executors;
 using Microsoft.Azure.WebJobs.Host.Listeners;
 using Microsoft.Azure.WebJobs.Host.TestCommon;
-using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Logging;
 using Microsoft.WindowsAzure.Storage.Blob;
 using Moq;
 using Xunit;
@@ -20,6 +21,16 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests.Blobs.Listeners
     {
         // Note: The tests that return true consume the notification.
         // The tests that return false reset the notification (to be provided again later).
+
+        private readonly TestLoggerProvider _loggerProvider = new TestLoggerProvider();
+        private readonly ILogger<BlobListener> _logger;
+
+        public BlobTriggerExecutorTests()
+        {
+            var loggerFactory = new LoggerFactory();
+            loggerFactory.AddProvider(_loggerProvider);
+            _logger = loggerFactory.CreateLogger<BlobListener>();
+        }
 
         [Fact]
         public void ExecuteAsync_IfBlobDoesNotMatchPattern_ReturnsSuccessfulResult()
@@ -42,6 +53,15 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests.Blobs.Listeners
 
             // Assert
             Assert.True(task.Result.Succeeded);
+
+            // Validate log is written
+            var logMessage = _loggerProvider.GetAllLogMessages().Single();
+            Assert.Equal("BlobDoesNotMatchPattern", logMessage.EventId.Name);
+            Assert.Equal(LogLevel.Debug, logMessage.Level);
+            Assert.Equal(3, logMessage.State.Count());
+            Assert.Equal(containerName + "/{name}", logMessage.GetStateValue<string>("pattern"));
+            Assert.Equal(blob.Name, logMessage.GetStateValue<string>("blobName"));
+            Assert.True(!string.IsNullOrWhiteSpace(logMessage.GetStateValue<string>("{OriginalFormat}")));
         }
 
         [Fact]
@@ -59,6 +79,14 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests.Blobs.Listeners
 
             // Assert
             Assert.True(task.Result.Succeeded);
+
+            // Validate log is written
+            var logMessage = _loggerProvider.GetAllLogMessages().Single();
+            Assert.Equal("BlobHasNoETag", logMessage.EventId.Name);
+            Assert.Equal(LogLevel.Debug, logMessage.Level);
+            Assert.Equal(2, logMessage.State.Count());
+            Assert.Equal(blob.Name, logMessage.GetStateValue<string>("blobName"));
+            Assert.True(!string.IsNullOrWhiteSpace(logMessage.GetStateValue<string>("{OriginalFormat}")));
         }
 
         [Fact]
@@ -77,6 +105,15 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests.Blobs.Listeners
 
             // Assert
             Assert.True(task.Result.Succeeded);
+
+            // Validate log is written
+            var logMessage = _loggerProvider.GetAllLogMessages().Single();
+            Assert.Equal("BlobAlreadyProcessed", logMessage.EventId.Name);
+            Assert.Equal(LogLevel.Debug, logMessage.Level);
+            Assert.Equal(3, logMessage.State.Count());
+            Assert.Equal(blob.Name, logMessage.GetStateValue<string>("blobName"));
+            Assert.Equal("ETag", logMessage.GetStateValue<string>("eTag"));
+            Assert.True(!string.IsNullOrWhiteSpace(logMessage.GetStateValue<string>("{OriginalFormat}")));
         }
 
         [Fact]
@@ -346,7 +383,7 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests.Blobs.Listeners
             Mock<IBlobTriggerQueueWriter> queueWriterMock = new Mock<IBlobTriggerQueueWriter>(MockBehavior.Strict);
             queueWriterMock
                 .Setup(w => w.EnqueueAsync(It.IsAny<BlobTriggerMessage>(), It.IsAny<CancellationToken>()))
-                .Returns(Task.FromResult<(string, string)>((null, null)));
+                .Returns(Task.FromResult(("testQueueName", "testMessageId")));
             IBlobTriggerQueueWriter queueWriter = queueWriterMock.Object;
 
             ITriggerExecutor<ICloudBlob> product = CreateProductUnderTest(expectedFunctionId, input, eTagReader,
@@ -366,6 +403,16 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests.Blobs.Listeners
                     Times.Once());
             managerMock.Verify();
             Assert.True(task.Result.Succeeded);
+
+            // Validate log is written
+            var logMessage = _loggerProvider.GetAllLogMessages().Single();
+            Assert.Equal("BlobMessageEnqueued", logMessage.EventId.Name);
+            Assert.Equal(LogLevel.Debug, logMessage.Level);
+            Assert.Equal(4, logMessage.State.Count());
+            Assert.Equal(blob.Name, logMessage.GetStateValue<string>("blobName"));
+            Assert.Equal("testQueueName", logMessage.GetStateValue<string>("queueName"));
+            Assert.Equal("testMessageId", logMessage.GetStateValue<string>("messageId"));
+            Assert.True(!string.IsNullOrWhiteSpace(logMessage.GetStateValue<string>("{OriginalFormat}")));
         }
 
         private static FakeStorageAccount CreateAccount()
@@ -416,32 +463,32 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests.Blobs.Listeners
             return new Mock<IBlobTriggerQueueWriter>(MockBehavior.Strict).Object;
         }
 
-        private static BlobTriggerExecutor CreateProductUnderTest(IBlobPathSource input)
+        private BlobTriggerExecutor CreateProductUnderTest(IBlobPathSource input)
         {
             return CreateProductUnderTest(input, CreateDummyETagReader());
         }
 
-        private static BlobTriggerExecutor CreateProductUnderTest(IBlobPathSource input, IBlobETagReader eTagReader)
+        private BlobTriggerExecutor CreateProductUnderTest(IBlobPathSource input, IBlobETagReader eTagReader)
         {
             return CreateProductUnderTest(input, eTagReader, CreateDummyReceiptManager());
         }
 
-        private static BlobTriggerExecutor CreateProductUnderTest(IBlobPathSource input, IBlobETagReader eTagReader,
+        private BlobTriggerExecutor CreateProductUnderTest(IBlobPathSource input, IBlobETagReader eTagReader,
             IBlobReceiptManager receiptManager)
         {
             return CreateProductUnderTest("FunctionId", input, eTagReader, receiptManager, CreateDummyQueueWriter());
         }
 
-        private static BlobTriggerExecutor CreateProductUnderTest(IBlobPathSource input, IBlobETagReader eTagReader,
+        private BlobTriggerExecutor CreateProductUnderTest(IBlobPathSource input, IBlobETagReader eTagReader,
             IBlobReceiptManager receiptManager, IBlobTriggerQueueWriter queueWriter)
         {
             return CreateProductUnderTest("FunctionId", input, eTagReader, receiptManager, queueWriter);
         }
 
-        private static BlobTriggerExecutor CreateProductUnderTest(string functionId, IBlobPathSource input,
+        private BlobTriggerExecutor CreateProductUnderTest(string functionId, IBlobPathSource input,
             IBlobETagReader eTagReader, IBlobReceiptManager receiptManager, IBlobTriggerQueueWriter queueWriter)
         {
-            return new BlobTriggerExecutor(String.Empty, functionId, input, eTagReader, receiptManager, queueWriter, NullLogger<BlobListener>.Instance);
+            return new BlobTriggerExecutor(String.Empty, functionId, input, eTagReader, receiptManager, queueWriter, _logger);
         }
 
         private static Mock<IBlobReceiptManager> CreateReceiptManagerReferenceMock()

@@ -13,6 +13,8 @@ using FakeStorage;
 using Microsoft.Azure.WebJobs.Host.Blobs.Listeners;
 using Microsoft.Azure.WebJobs.Host.Executors;
 using Microsoft.Azure.WebJobs.Host.Listeners;
+using Microsoft.Azure.WebJobs.Host.TestCommon;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.WindowsAzure.Storage;
 using Microsoft.WindowsAzure.Storage.Blob;
@@ -22,13 +24,23 @@ namespace Microsoft.Azure.WebJobs.Host.FunctionalTests.Blobs.Listeners
 {
     public class ScanBlobScanLogHybridPollingStrategyTests
     {
+        private readonly TestLoggerProvider _loggerProvider = new TestLoggerProvider();
+        private readonly ILogger<BlobListener> _logger;
+
+        public ScanBlobScanLogHybridPollingStrategyTests()
+        {
+            var loggerFactory = new LoggerFactory();
+            loggerFactory.AddProvider(_loggerProvider);
+            _logger = loggerFactory.CreateLogger<BlobListener>();
+        }
+
         [Fact]
         public async Task ScanBlobScanLogHybridPollingStrategyTestBlobListener()
         {
             string containerName = Path.GetRandomFileName();
             var account = CreateFakeStorageAccount();
             var container = account.CreateCloudBlobClient().GetContainerReference(containerName);
-            IBlobListenerStrategy product = new ScanBlobScanLogHybridPollingStrategy(new TestBlobScanInfoManager(), NullLogger<BlobListener>.Instance);
+            IBlobListenerStrategy product = new ScanBlobScanLogHybridPollingStrategy(new TestBlobScanInfoManager(), _logger);
             LambdaBlobTriggerExecutor executor = new LambdaBlobTriggerExecutor();
             product.Register(container, executor);
             product.Start();
@@ -41,6 +53,57 @@ namespace Microsoft.Azure.WebJobs.Host.FunctionalTests.Blobs.Listeners
 
             // Now run again; shouldn't show up. 
             RunExecuterWithExpectedBlobs(new List<string>(), product, executor);
+
+            // Verify happy-path logging.
+            var logMessages = _loggerProvider.GetAllLogMessages().ToArray();
+            Assert.Equal(6, logMessages.Length);
+
+            // 1 initialization log
+            var initLog = logMessages.Single(m => m.EventId.Name == "InitializedScanInfo");
+            Assert.Equal(Microsoft.Extensions.Logging.LogLevel.Debug, initLog.Level);
+            Assert.Equal(3, initLog.State.Count());
+            Assert.Equal(containerName, initLog.GetStateValue<string>("containerName"));
+            Assert.True(!string.IsNullOrWhiteSpace(initLog.GetStateValue<string>("latestScanInfo")));
+            Assert.True(!string.IsNullOrWhiteSpace(initLog.GetStateValue<string>("{OriginalFormat}")));
+
+            // 3 polling logs
+            var pollLogs = logMessages.Where(m => m.EventId.Name == "PollBlobContainer").ToArray();
+            Assert.Equal(3, pollLogs.Length);
+
+            void ValidatePollingLog(LogMessage pollingLog, int expectedBlobCount)
+            {
+                Assert.Equal(Microsoft.Extensions.Logging.LogLevel.Debug, pollingLog.Level);
+                Assert.Equal(7, pollingLog.State.Count());
+                Assert.Equal(containerName, pollingLog.GetStateValue<string>("containerName"));
+                Assert.Equal(expectedBlobCount, pollingLog.GetStateValue<int>("blobCount"));
+                Assert.True(!string.IsNullOrWhiteSpace(pollingLog.GetStateValue<string>("pollMinimumTime")));
+                Assert.True(!string.IsNullOrWhiteSpace(pollingLog.GetStateValue<string>("clientRequestId")));
+                Assert.True(pollingLog.GetStateValue<long>("pollLatency") >= 0);
+                Assert.False(pollingLog.GetStateValue<bool>("hasContinuationToken"));
+                Assert.True(!string.IsNullOrWhiteSpace(pollingLog.GetStateValue<string>("{OriginalFormat}")));
+            }
+
+            ValidatePollingLog(pollLogs[0], 0);
+            ValidatePollingLog(pollLogs[1], 1);
+            ValidatePollingLog(pollLogs[2], 1);
+
+            // 2 processing logs. Our scans always include the previous timestamp so we don't miss anything.
+            // That means that this will emit the "Proccessing" log for this blob twice, but the later check
+            // for a Receipt will skip it.
+            var processingLogs = logMessages.Where(m => m.EventId.Name == "ProcessingBlob").ToArray();
+            Assert.Equal(2, processingLogs.Length);
+
+            void ValidateProcessingLog(LogMessage processingLog)
+            {
+                Assert.Equal(Microsoft.Extensions.Logging.LogLevel.Debug, processingLog.Level);
+                Assert.Equal(3, processingLog.State.Count());
+                Assert.Equal(expectedBlobName, processingLog.GetStateValue<string>("blobName"));
+                Assert.True(!string.IsNullOrWhiteSpace(processingLog.GetStateValue<string>("clientRequestId")));
+                Assert.True(!string.IsNullOrWhiteSpace(processingLog.GetStateValue<string>("{OriginalFormat}")));
+            }
+
+            ValidateProcessingLog(processingLogs[0]);
+            ValidateProcessingLog(processingLogs[1]);
         }
 
         [Fact]
@@ -345,19 +408,6 @@ namespace Microsoft.Azure.WebJobs.Host.FunctionalTests.Blobs.Listeners
         private static StorageAccount CreateFakeStorageAccount()
         {
             return new FakeStorageAccount();
-        }
-
-        private void AssertLogPollStrategyUsed(IBlobListenerStrategy product, int containerCount)
-        {
-            PollLogsStrategy containersRegisteredForLogPolling = (PollLogsStrategy)typeof(ScanBlobScanLogHybridPollingStrategy)
-                   .GetField("_pollLogStrategy", BindingFlags.Instance | BindingFlags.NonPublic)
-                   .GetValue(product);
-            IDictionary<CloudBlobContainer, ICollection<ITriggerExecutor<ICloudBlob>>> logPollingContainers =
-                (IDictionary<CloudBlobContainer, ICollection<ITriggerExecutor<ICloudBlob>>>)
-                typeof(PollLogsStrategy)
-                   .GetField("_registrations", BindingFlags.Instance | BindingFlags.NonPublic)
-                   .GetValue(containersRegisteredForLogPolling);
-            Assert.Equal(logPollingContainers.ToList().Count, containerCount);
         }
 
         private void RunExecuterWithExpectedBlobsInternal(IDictionary<string, int> blobNameMap, IBlobListenerStrategy product, LambdaBlobTriggerExecutor executor, int expectedCount)
