@@ -48,7 +48,7 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
         {
             List<ICloudBlob> blobs = new List<ICloudBlob>();
 
-            var time = DateTime.UtcNow; // will scan back 2 hours, which is enough to deal with clock sqew
+            var time = DateTime.UtcNow; // will scan back 2 hours, which is enough to deal with clock skew
             foreach (var blob in await ListRecentLogFilesAsync(_blobClient, time, cancellationToken, hoursWindow))
             {
                 bool isAdded = _scannedBlobNames.Add(blob.Name);

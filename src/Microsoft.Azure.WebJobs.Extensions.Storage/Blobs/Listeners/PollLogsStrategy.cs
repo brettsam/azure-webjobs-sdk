@@ -10,13 +10,14 @@ using System.Threading.Tasks;
 using Microsoft.Azure.WebJobs.Host.Executors;
 using Microsoft.Azure.WebJobs.Host.Listeners;
 using Microsoft.Azure.WebJobs.Host.Timers;
+using Microsoft.Extensions.Logging;
 using Microsoft.WindowsAzure.Storage;
 using Microsoft.WindowsAzure.Storage.Blob;
 
 namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
 {
     // A hybrid strategy that begins with a full container scan and then does incremental updates via log polling.
-    internal sealed class PollLogsStrategy : IBlobListenerStrategy
+    internal sealed partial class PollLogsStrategy : IBlobListenerStrategy
     {
         private static readonly TimeSpan TwoSeconds = TimeSpan.FromSeconds(2);
 
@@ -25,10 +26,12 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
         private readonly Thread _initialScanThread;
         private readonly ConcurrentQueue<ICloudBlob> _blobsFoundFromScanOrNotification;
         private readonly CancellationTokenSource _cancellationTokenSource;
+        private readonly ILogger<BlobListener> _logger;
+
         private bool _performInitialScan;
         private bool _disposed;
 
-        public PollLogsStrategy(bool performInitialScan = true)
+        public PollLogsStrategy(ILogger<BlobListener> logger, bool performInitialScan = true)
         {
             _registrations = new Dictionary<CloudBlobContainer, ICollection<ITriggerExecutor<ICloudBlob>>>(
                 new CloudBlobContainerComparer());
@@ -37,6 +40,7 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
             _blobsFoundFromScanOrNotification = new ConcurrentQueue<ICloudBlob>();
             _cancellationTokenSource = new CancellationTokenSource();
             _performInitialScan = performInitialScan;
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
         public async Task RegisterAsync(CloudBlobContainer container, ITriggerExecutor<ICloudBlob> triggerExecutor,
@@ -156,6 +160,8 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
             foreach (ITriggerExecutor<ICloudBlob> registration in _registrations[container])
             {
                 cancellationToken.ThrowIfCancellationRequested();
+
+                Logger.ProcessingBlobFromLogScan(_logger, blob.Name);
 
                 FunctionResult result = await registration.ExecuteAsync(blob, cancellationToken);
                 if (!result.Succeeded)

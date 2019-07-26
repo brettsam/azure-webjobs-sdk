@@ -36,7 +36,7 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
         {
             _blobScanInfoManager = blobScanInfoManager;
             _scanInfo = new Dictionary<CloudBlobContainer, ContainerScanInfo>(new CloudBlobContainerComparer());
-            _pollLogStrategy = new PollLogsStrategy(performInitialScan: false);
+            _pollLogStrategy = new PollLogsStrategy(logger, performInitialScan: false);
             _cancellationTokenSource = new CancellationTokenSource();
             _blobsFoundFromScanOrNotification = new ConcurrentQueue<BlobNotification>();
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -64,8 +64,7 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
             // Register all in logPolling, there is no problem if we get 2 notifications of the new blob
             await _pollLogStrategy.RegisterAsync(container, triggerExecutor, cancellationToken);
 
-            ContainerScanInfo containerScanInfo;
-            if (!_scanInfo.TryGetValue(container, out containerScanInfo))
+            if (!_scanInfo.TryGetValue(container, out ContainerScanInfo containerScanInfo))
             {
                 // First, try to load serialized scanInfo for this container.
                 DateTime? latestStoredScan = await _blobScanInfoManager.LoadLatestScanAsync(container.ServiceClient.Credentials.AccountName, container.Name);
