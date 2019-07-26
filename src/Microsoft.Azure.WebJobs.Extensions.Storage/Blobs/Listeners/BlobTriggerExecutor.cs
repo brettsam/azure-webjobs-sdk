@@ -124,9 +124,8 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
 
                 Logger.BlobMessageEnqueued(_logger, value.Name, messageId, queueName);
 
-                // Complete the receipt & release the lease
+                // Complete the receipt
                 await _receiptManager.MarkCompletedAsync(receiptBlob, leaseId, cancellationToken);
-                await _receiptManager.ReleaseLeaseAsync(receiptBlob, leaseId, cancellationToken);
 
                 return new FunctionResult(true);
             }

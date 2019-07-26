@@ -303,7 +303,11 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests.Blobs.Listeners
 
         private static CloudQueueMessage CreateMessage(string content)
         {
-            return new CloudQueueMessage(content);
+            var message = new CloudQueueMessage(content);
+            message.SetId(Guid.NewGuid().ToString());
+            message.SetInsertionTime(DateTimeOffset.UtcNow);
+            message.SetDequeueCount(0);
+            return message;
         }
 
         private static BlobQueueTriggerExecutor CreateProductUnderTest()
