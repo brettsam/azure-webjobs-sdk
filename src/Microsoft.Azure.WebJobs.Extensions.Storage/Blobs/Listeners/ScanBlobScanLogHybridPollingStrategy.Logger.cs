@@ -24,10 +24,6 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
                 LoggerMessage.Define<string>(LogLevel.Debug, new EventId(3, nameof(ContainerDoesNotExist)),
                     "Container '{containerName}' does not exist.");
 
-            private static readonly Action<ILogger<BlobListener>, string, string, Exception> _processingBlob =
-                LoggerMessage.Define<string, string>(LogLevel.Debug, new EventId(4, nameof(ProcessingBlob)),
-                    "Processing blob from ClientRequestId '{clientRequestId}': '{blobName}'");
-
             public static void InitializedScanInfo(ILogger<BlobListener> logger, string container, DateTime latestScanInfo) =>
                 _initializedScanInfo(logger, container, latestScanInfo.ToString(Constants.DateTimeFormatString), null);
 
@@ -36,9 +32,6 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
 
             public static void ContainerDoesNotExist(ILogger<BlobListener> logger, string container) =>
                 _containerDoesNotExist(logger, container, null);
-
-            public static void ProcessingBlob(ILogger<BlobListener> logger, string clientRequestId, string blobName) =>
-                _processingBlob(logger, clientRequestId, blobName, null);
         }
     }
 }

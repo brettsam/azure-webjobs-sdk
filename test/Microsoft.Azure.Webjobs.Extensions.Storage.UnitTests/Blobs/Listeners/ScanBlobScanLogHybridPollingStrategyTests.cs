@@ -485,7 +485,7 @@ namespace Microsoft.Azure.WebJobs.Host.FunctionalTests.Blobs.Listeners
             return blobName;
         }
 
-        private class LambdaBlobTriggerExecutor : ITriggerExecutor<ICloudBlob>
+        private class LambdaBlobTriggerExecutor : ITriggerExecutor<BlobTriggerExecutorContext>
         {
             public ICollection<string> _blobReceipts { get; } = new Collection<string>();
 
@@ -493,18 +493,18 @@ namespace Microsoft.Azure.WebJobs.Host.FunctionalTests.Blobs.Listeners
 
             public Func<ICloudBlob, bool> ExecuteLambda { get; set; }
 
-            public Task<FunctionResult> ExecuteAsync(ICloudBlob value, CancellationToken cancellationToken)
+            public Task<FunctionResult> ExecuteAsync(BlobTriggerExecutorContext value, CancellationToken cancellationToken)
             {
                 bool succeeded = true;
 
                 // Only invoke if it's a new blob.
-                if (!_blobReceipts.Contains(value.Name))
+                if (!_blobReceipts.Contains(value.Blob.Name))
                 {
-                    succeeded = ExecuteLambda.Invoke(value);
+                    succeeded = ExecuteLambda.Invoke(value.Blob);
 
                     if (succeeded)
                     {
-                        _blobReceipts.Add(value.Name);
+                        _blobReceipts.Add(value.Blob.Name);
                     }
                 }
 

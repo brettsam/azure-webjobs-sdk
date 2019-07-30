@@ -36,7 +36,7 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
             get { return _strategy; }
         }
 
-        public Task RegisterAsync(CloudBlobContainer container, ITriggerExecutor<ICloudBlob> triggerExecutor,
+        public Task RegisterAsync(CloudBlobContainer container, ITriggerExecutor<BlobTriggerExecutorContext> triggerExecutor,
             CancellationToken cancellationToken)
         {
             if (_started)

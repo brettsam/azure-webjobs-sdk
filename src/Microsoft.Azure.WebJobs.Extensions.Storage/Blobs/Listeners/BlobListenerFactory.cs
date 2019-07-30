@@ -149,7 +149,7 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
             IMessageEnqueuedWatcher messageEnqueuedWatcher,
             CancellationToken cancellationToken)
         {
-            BlobTriggerExecutor triggerExecutor = new BlobTriggerExecutor(hostId, _functionDescriptor.Id, _input,
+            BlobTriggerExecutor triggerExecutor = new BlobTriggerExecutor(hostId, _functionDescriptor, _input,
                 BlobETagReader.Instance, new BlobReceiptManager(blobClient),
                 new BlobTriggerQueueWriter(hostBlobTriggerQueue, messageEnqueuedWatcher), _loggerFactory.CreateLogger<BlobListener>());
 

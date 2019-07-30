@@ -55,7 +55,7 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
             _cancellationTokenSource.Cancel();
         }
 
-        public async Task RegisterAsync(CloudBlobContainer container, ITriggerExecutor<ICloudBlob> triggerExecutor, CancellationToken cancellationToken)
+        public async Task RegisterAsync(CloudBlobContainer container, ITriggerExecutor<BlobTriggerExecutorContext> triggerExecutor, CancellationToken cancellationToken)
         {
             // Register and Execute are not concurrency-safe.
             // Avoiding calling Register while Execute is running is the caller's responsibility.
@@ -71,7 +71,7 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
 
                 containerScanInfo = new ContainerScanInfo()
                 {
-                    Registrations = new List<ITriggerExecutor<ICloudBlob>>(),
+                    Registrations = new List<ITriggerExecutor<BlobTriggerExecutorContext>>(),
                     LastSweepCycleLatestModified = latestStoredScan ?? DateTime.MinValue,
                     CurrentSweepCycleLatestModified = DateTime.MinValue,
                     ContinuationToken = null
@@ -103,8 +103,9 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
                     break;
                 }
 
-                notifications.Add(NotifyRegistrationsAsync(failedNotification.Blob, failedNotifications, failedNotification.OriginalClientRequestId, cancellationToken));
+                notifications.Add(NotifyRegistrationsAsync(failedNotification.Blob, failedNotifications, failedNotification.PollId, cancellationToken));
             }
+
             await Task.WhenAll(notifications);
 
             List<Task> pollingTasks = new List<Task>();
@@ -218,6 +219,7 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
             {
 
                 OperationContext operationContext = new OperationContext { ClientRequestID = clientRequestId };
+
                 blobSegment = await container.ListBlobsSegmentedAsync(prefix: null, useFlatBlobListing: true,
                     blobListingDetails: BlobListingDetails.None, maxResults: blobPollLimitPerContainer, currentToken: continuationToken,
                     options: null, operationContext: operationContext, cancellationToken: cancellationToken);
@@ -283,36 +285,24 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
                 return;
             }
 
-            foreach (ITriggerExecutor<ICloudBlob> registration in containerScanInfo.Registrations)
+            foreach (ITriggerExecutor<BlobTriggerExecutorContext> registration in containerScanInfo.Registrations)
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                Logger.ProcessingBlob(_logger, clientRequestId, blob.Name);
+                BlobTriggerExecutorContext context = new BlobTriggerExecutorContext
+                {
+                    Blob = blob,
+                    PollId = clientRequestId,
+                    TriggerSource = BlobTriggerSource.ContainerScan
+                };
 
-                FunctionResult result = await registration.ExecuteAsync(blob, cancellationToken);
+                FunctionResult result = await registration.ExecuteAsync(context, cancellationToken);
                 if (!result.Succeeded)
                 {
                     // If notification failed, try again on the next iteration.
                     failedNotifications.Add(new BlobNotification(blob, clientRequestId));
                 }
             }
-        }
-
-        private class BlobNotification
-        {
-            public BlobNotification(ICloudBlob blob, string originalClientRequestId)
-            {
-                Blob = blob;
-                OriginalClientRequestId = originalClientRequestId;
-            }
-
-            public ICloudBlob Blob { get; private set; }
-
-            /// <summary>
-            /// The ClientRequestId sent to storage when this blob was found. This can be null if the notification
-            /// happened internally without polling.
-            /// </summary>
-            public string OriginalClientRequestId { get; set; }
         }
     }
 }

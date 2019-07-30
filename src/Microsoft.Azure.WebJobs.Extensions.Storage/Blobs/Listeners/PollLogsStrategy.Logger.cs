@@ -12,12 +12,12 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
         {
             // Keep these events in 300-399 range.
 
-            private static readonly Action<ILogger<BlobListener>, string, Exception> _processingBlobFromLogScan =
-               LoggerMessage.Define<string>(LogLevel.Debug, new EventId(300, nameof(ProcessingBlobFromLogScan)),
-                   "Blob log scan is processing blob '{blobName}'.");
+            private static readonly Action<ILogger<BlobListener>, string, string, int, Exception> _scanBlobLogs =
+               LoggerMessage.Define<string, string, int>(LogLevel.Debug, new EventId(300, nameof(ScanBlobLogs)),
+                   "Log scan for recent blob updates in container '{containerName}' with PollId '{pollId}' found {blobCount} blobs.");
 
-            public static void ProcessingBlobFromLogScan(ILogger<BlobListener> logger, string blobName) =>
-                _processingBlobFromLogScan(logger, blobName, null);
+            public static void ScanBlobLogs(ILogger<BlobListener> logger, string containerName, string pollId, int blobCount) =>
+                _scanBlobLogs(logger, containerName, pollId, blobCount, null);
         }
     }
 }

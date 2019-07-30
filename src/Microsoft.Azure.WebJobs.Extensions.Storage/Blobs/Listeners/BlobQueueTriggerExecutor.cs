@@ -105,12 +105,12 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
             // Include the queue details here.
             IDictionary<string, string> details = QueueTriggerExecutor.PopulateTriggerDetails(value);
 
-            if (blob?.Properties?.Created.Value != null)
+            if (blob?.Properties?.Created != null && blob.Properties.Created.HasValue)
             {
                 details[nameof(CloudBlob.Properties.Created)] = blob.Properties.Created.Value.ToString(Constants.DateTimeFormatString);
             }
 
-            if (blob?.Properties?.LastModified.Value != null)
+            if (blob?.Properties?.LastModified != null && blob.Properties.LastModified.HasValue)
             {
                 details[nameof(CloudBlob.Properties.LastModified)] = blob.Properties.LastModified.Value.ToString(Constants.DateTimeFormatString);
             }
