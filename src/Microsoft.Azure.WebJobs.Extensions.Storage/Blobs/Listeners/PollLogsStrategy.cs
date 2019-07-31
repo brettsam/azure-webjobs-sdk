@@ -115,13 +115,13 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
                 // Filter and group these by container for easier logging.
                 var recentWritesGroupedByContainer = recentWrites
                     .Where(p => _registrations.ContainsKey(p.Container))
-                    .GroupBy(p => p.Container);
+                    .GroupBy(p => p.Container.Name);
 
                 foreach (var containerGroup in recentWritesGroupedByContainer)
                 {
                     ICloudBlob[] blobs = containerGroup.ToArray();
 
-                    Logger.ScanBlobLogs(_logger, containerGroup.Key.Name, pollId, blobs.Length);
+                    Logger.ScanBlobLogs(_logger, containerGroup.Key, pollId, blobs.Length);
 
                     foreach (ICloudBlob blob in blobs)
                     {
