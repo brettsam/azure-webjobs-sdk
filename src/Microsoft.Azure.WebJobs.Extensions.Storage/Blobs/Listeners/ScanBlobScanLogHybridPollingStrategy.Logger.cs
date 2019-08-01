@@ -24,6 +24,10 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
                 LoggerMessage.Define<string>(LogLevel.Debug, new EventId(3, nameof(ContainerDoesNotExist)),
                     "Container '{containerName}' does not exist.");
 
+            private static readonly Action<ILogger<BlobListener>, string, int, string, Exception> _maxCacheSize =
+                LoggerMessage.Define<string, int, string>(LogLevel.Debug, new EventId(4, nameof(MaxCacheSizeReached)),
+                    "Internal blob cache for container '{container}' has more than {maxCacheSize} blobs with timestamp '{lastModified}'. Additional blobs with this timestamp will be checked against receipts before invoking functions.");
+
             public static void InitializedScanInfo(ILogger<BlobListener> logger, string container, DateTime latestScanInfo) =>
                 _initializedScanInfo(logger, container, latestScanInfo.ToString(Constants.DateTimeFormatString), null);
 
@@ -32,6 +36,9 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
 
             public static void ContainerDoesNotExist(ILogger<BlobListener> logger, string container) =>
                 _containerDoesNotExist(logger, container, null);
+
+            public static void MaxCacheSizeReached(ILogger<BlobListener> logger, string container, int maxCacheSize, DateTime blobTimestamp) =>
+                _maxCacheSize(logger, container, maxCacheSize, blobTimestamp.ToString(Constants.DateTimeFormatString), null);
         }
     }
 }

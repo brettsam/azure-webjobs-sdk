@@ -14,7 +14,11 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
 
         public DateTime LastSweepCycleLatestModified { get; set; }
 
+        public HashSet<string> LastSweepCycleBlobNames { get; set; } = new HashSet<string>();
+
         public DateTime CurrentSweepCycleLatestModified { get; set; }
+
+        public HashSet<string> CurrentSweepCycleBlobNames { get; } = new HashSet<string>();
 
         public BlobContinuationToken ContinuationToken { get; set; }
     }

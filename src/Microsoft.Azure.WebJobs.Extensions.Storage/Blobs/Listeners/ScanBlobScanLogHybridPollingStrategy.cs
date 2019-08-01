@@ -19,11 +19,15 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
 {
     internal sealed partial class ScanBlobScanLogHybridPollingStrategy : IBlobListenerStrategy
     {
+        private const int _defaultMaxCacheSize = 1000;
+
         private static readonly TimeSpan PollingInterval = TimeSpan.FromSeconds(10);
         private readonly IDictionary<CloudBlobContainer, ContainerScanInfo> _scanInfo;
         private readonly ConcurrentQueue<BlobNotification> _blobsFoundFromScanOrNotification;
         private readonly ILogger<BlobListener> _logger;
         private readonly CancellationTokenSource _cancellationTokenSource;
+        private readonly int _maxCacheSize;
+
         private IBlobScanInfoManager _blobScanInfoManager;
         // A budget is allocated representing the number of blobs to be listed in a polling 
         // interval, each container will get its share of _scanBlobLimitPerPoll/number of containers.
@@ -32,7 +36,13 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
         private PollLogsStrategy _pollLogStrategy;
         private bool _disposed;
 
-        public ScanBlobScanLogHybridPollingStrategy(IBlobScanInfoManager blobScanInfoManager, ILogger<BlobListener> logger) : base()
+        public ScanBlobScanLogHybridPollingStrategy(IBlobScanInfoManager blobScanInfoManager, ILogger<BlobListener> logger)
+            : this(blobScanInfoManager, logger, _defaultMaxCacheSize)
+        {
+        }
+
+        public ScanBlobScanLogHybridPollingStrategy(IBlobScanInfoManager blobScanInfoManager, ILogger<BlobListener> logger, int maxCacheSize)
+            : base()
         {
             _blobScanInfoManager = blobScanInfoManager;
             _scanInfo = new Dictionary<CloudBlobContainer, ContainerScanInfo>(new CloudBlobContainerComparer());
@@ -40,6 +50,7 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
             _cancellationTokenSource = new CancellationTokenSource();
             _blobsFoundFromScanOrNotification = new ConcurrentQueue<BlobNotification>();
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _maxCacheSize = maxCacheSize;
         }
 
         public void Start()
@@ -248,14 +259,33 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
                 var properties = currentBlob.Properties;
                 DateTime lastModifiedTimestamp = properties.LastModified.Value.UtcDateTime;
 
-                if (lastModifiedTimestamp > containerScanInfo.CurrentSweepCycleLatestModified)
+                // We maintain a list of the blob names with the most recent timestamp so in our
+                // subsequent sweeps we know if we've already seen them.
+                if (lastModifiedTimestamp == containerScanInfo.CurrentSweepCycleLatestModified)
+                {
+                    // Don't allow this to get too large. If it overflows, things will still work,
+                    // but it wil check more blob receipts before invoking a function.
+                    if (containerScanInfo.CurrentSweepCycleBlobNames.Count < _maxCacheSize)
+                    {
+                        containerScanInfo.CurrentSweepCycleBlobNames.Add(currentBlob.Name);
+                    }
+                }
+                else if (lastModifiedTimestamp > containerScanInfo.CurrentSweepCycleLatestModified)
                 {
                     containerScanInfo.CurrentSweepCycleLatestModified = lastModifiedTimestamp;
+                    containerScanInfo.CurrentSweepCycleBlobNames.Clear();
+                    containerScanInfo.CurrentSweepCycleBlobNames.Add(currentBlob.Name);
                 }
 
                 // Blob timestamps are rounded to the nearest second, so make sure we continue to check
                 // the previous timestamp to catch any blobs that came in slightly after our previous poll.
-                if (lastModifiedTimestamp >= containerScanInfo.LastSweepCycleLatestModified)
+                // Only add it if this is a new blob that we did not previously see.
+                if (lastModifiedTimestamp == containerScanInfo.LastSweepCycleLatestModified &&
+                    !containerScanInfo.LastSweepCycleBlobNames.Contains(currentBlob.Name))
+                {
+                    newBlobs.Add(currentBlob);
+                }
+                else if (lastModifiedTimestamp > containerScanInfo.LastSweepCycleLatestModified)
                 {
                     newBlobs.Add(currentBlob);
                 }
@@ -272,6 +302,15 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
                 containerScanInfo.CurrentSweepCycleLatestModified > containerScanInfo.LastSweepCycleLatestModified)
             {
                 containerScanInfo.LastSweepCycleLatestModified = containerScanInfo.CurrentSweepCycleLatestModified;
+                containerScanInfo.LastSweepCycleBlobNames = new HashSet<string>(containerScanInfo.CurrentSweepCycleBlobNames);
+                containerScanInfo.CurrentSweepCycleBlobNames.Clear();
+
+                // If the cache of the latest modified names is at the max size, log it so we know why we may be seeing
+                // more blob receipt hits than expected in subsequent sweeps.
+                if (containerScanInfo.LastSweepCycleBlobNames.Count >= _maxCacheSize)
+                {
+                    Logger.MaxCacheSizeReached(_logger, container.Name, _maxCacheSize, containerScanInfo.LastSweepCycleLatestModified);
+                }
             }
 
             return newBlobs;

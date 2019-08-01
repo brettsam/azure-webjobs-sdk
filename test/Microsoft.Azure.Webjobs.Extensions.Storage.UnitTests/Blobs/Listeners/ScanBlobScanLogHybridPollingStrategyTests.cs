@@ -56,7 +56,7 @@ namespace Microsoft.Azure.WebJobs.Host.FunctionalTests.Blobs.Listeners
 
             // Verify happy-path logging.
             var logMessages = _loggerProvider.GetAllLogMessages().ToArray();
-            Assert.Equal(6, logMessages.Length);
+            Assert.Equal(4, logMessages.Length);
 
             // 1 initialization log
             var initLog = logMessages.Single(m => m.EventId.Name == "InitializedScanInfo");
@@ -85,25 +85,7 @@ namespace Microsoft.Azure.WebJobs.Host.FunctionalTests.Blobs.Listeners
 
             ValidatePollingLog(pollLogs[0], 0);
             ValidatePollingLog(pollLogs[1], 1);
-            ValidatePollingLog(pollLogs[2], 1);
-
-            // 2 processing logs. Our scans always include the previous timestamp so we don't miss anything.
-            // That means that this will emit the "Proccessing" log for this blob twice, but the later check
-            // for a Receipt will skip it.
-            var processingLogs = logMessages.Where(m => m.EventId.Name == "ProcessingBlob").ToArray();
-            Assert.Equal(2, processingLogs.Length);
-
-            void ValidateProcessingLog(LogMessage processingLog)
-            {
-                Assert.Equal(Microsoft.Extensions.Logging.LogLevel.Debug, processingLog.Level);
-                Assert.Equal(3, processingLog.State.Count());
-                Assert.Equal(expectedBlobName, processingLog.GetStateValue<string>("blobName"));
-                Assert.True(!string.IsNullOrWhiteSpace(processingLog.GetStateValue<string>("clientRequestId")));
-                Assert.True(!string.IsNullOrWhiteSpace(processingLog.GetStateValue<string>("{OriginalFormat}")));
-            }
-
-            ValidateProcessingLog(processingLogs[0]);
-            ValidateProcessingLog(processingLogs[1]);
+            ValidatePollingLog(pollLogs[2], 0);
         }
 
         [Fact]
@@ -211,14 +193,15 @@ namespace Microsoft.Azure.WebJobs.Host.FunctionalTests.Blobs.Listeners
             timeMap[expectedNames.Single()] = now.AddSeconds(-60);
             RunExecuterWithExpectedBlobs(expectedNames, product, executor);
 
-            expectedNames.Add(await CreateBlobAndUploadToContainer(container));
-            timeMap[expectedNames.Last()] = now.AddSeconds(-59);
+            expectedNames.Clear();
 
-            // We should see the new item. We'll see 2 blobs, but only process 1 (due to receipt).
-            RunExecuterWithExpectedBlobs(expectedNames, product, executor, 1);
+            expectedNames.Add(await CreateBlobAndUploadToContainer(container));
+            timeMap[expectedNames.Single()] = now.AddSeconds(-59);
+
+            // We should see the new item.
+            RunExecuterWithExpectedBlobs(expectedNames, product, executor);
 
             Assert.Equal(2, container.CallCount);
-            Assert.Equal(expectedNames, executor.BlobReceipts);
         }
 
         [Fact]
@@ -235,11 +218,14 @@ namespace Microsoft.Azure.WebJobs.Host.FunctionalTests.Blobs.Listeners
             var now = DateTimeOffset.UtcNow;
             now = new DateTimeOffset(now.Year, now.Month, now.Day, now.Hour, now.Minute, now.Second, now.Offset);
 
+            int blobsSeen = 0;
+
             var container = new SkewableFakeStorageBlobContainer(containerName, client as FakeStorageBlobClient,
                 (blobs) =>
                 {
                     foreach (ICloudBlob blob in blobs.Results)
                     {
+                        blobsSeen++;
                         blob.Properties.SetLastModified(now);
                     }
                 });
@@ -258,13 +244,177 @@ namespace Microsoft.Azure.WebJobs.Host.FunctionalTests.Blobs.Listeners
 
             RunExecuterWithExpectedBlobs(expectedNames, product, executor);
 
+            expectedNames.Clear();
+
             expectedNames.Add(await CreateBlobAndUploadToContainer(container));
 
-            // We should see the new item. We'll see 2 blobs, but only process 1 (due to receipt).
-            RunExecuterWithExpectedBlobs(expectedNames, product, executor, 1);
+            // We should see the new item, even though the timestamp equals the previous item
+            RunExecuterWithExpectedBlobs(expectedNames, product, executor);
 
             Assert.Equal(2, container.CallCount);
-            Assert.Equal(expectedNames, executor.BlobReceipts);
+
+            // The first poll saw 1 blob; second poll saw 2.
+            Assert.Equal(3, blobsSeen);
+        }
+
+        [Fact]
+        public async Task BlobPolling_IncludesPreviousBatch_MultipleScan()
+        {
+            // Blob timestamps are rounded to the nearest second, so make sure we continue to poll
+            // the previous second to catch any blobs that came in slightly after our previous attempt.
+            int testScanBlobLimitPerPoll = 3;
+            string containerName = Path.GetRandomFileName();
+            var account = CreateFakeStorageAccount();
+            var client = account.CreateCloudBlobClient();
+
+            // Strip off milliseconds.
+            var now = DateTimeOffset.UtcNow;
+            now = new DateTimeOffset(now.Year, now.Month, now.Day, now.Hour, now.Minute, now.Second, now.Offset);
+
+            int blobsSeen = 0;
+
+            var container = new SkewableFakeStorageBlobContainer(containerName, client as FakeStorageBlobClient,
+                (blobs) =>
+                {
+                    foreach (ICloudBlob blob in blobs.Results)
+                    {
+                        blobsSeen++;
+                        blob.Properties.SetLastModified(now);
+                    }
+                });
+
+            IBlobListenerStrategy product = new ScanBlobScanLogHybridPollingStrategy(new TestBlobScanInfoManager(), NullLogger<BlobListener>.Instance);
+            LambdaBlobTriggerExecutor executor = new LambdaBlobTriggerExecutor();
+            typeof(ScanBlobScanLogHybridPollingStrategy)
+                   .GetField("_scanBlobLimitPerPoll", BindingFlags.Instance | BindingFlags.NonPublic)
+                   .SetValue(product, testScanBlobLimitPerPoll);
+
+            product.Register(container, executor);
+            product.Start();
+
+            List<string> expectedNames = new List<string>();
+
+            async Task AddTenBlobsAsync()
+            {
+                for (int i = 0; i < 10; i++)
+                {
+                    expectedNames.Add(await CreateBlobAndUploadToContainer(container));
+                }
+            }
+
+            // Add 10, which ensures several batches all with the same timestamp.
+            await AddTenBlobsAsync();
+
+            RunExecuteWithMultiPollingInterval(expectedNames, product, executor, testScanBlobLimitPerPoll);
+
+            expectedNames.Clear();
+
+            // Now add 10 more with the same timestamp.
+            await AddTenBlobsAsync();
+
+            // We should see the new items, even though the timestamp equals the previous item
+            RunExecuteWithMultiPollingIntervalSameTimestamp(expectedNames, product, executor);
+
+            // First scan will be 4 calls (10 items). Second scan will be 7 calls (20 items).
+            Assert.Equal(11, container.CallCount);
+
+            // The first poll saw 10 blobs; second poll saw 20.
+            Assert.Equal(30, blobsSeen);
+        }
+
+        [Fact]
+        public async Task BlobPolling_LatestTimestampCacheLimit()
+        {
+            // Blob timestamps are rounded to the nearest second, so make sure we continue to poll
+            // the previous second to catch any blobs that came in slightly after our previous attempt.
+            int testScanBlobLimitPerPoll = 3;
+            string containerName = Path.GetRandomFileName();
+            var account = CreateFakeStorageAccount();
+            var client = account.CreateCloudBlobClient();
+
+            // Strip off milliseconds.
+            var now = DateTimeOffset.UtcNow;
+            DateTimeOffset firstTimeStamp = new DateTimeOffset(now.Year, now.Month, now.Day, now.Hour, now.Minute, now.Second, now.Offset);
+            DateTimeOffset secondTimeStamp = firstTimeStamp.AddSeconds(5);
+
+            ICollection<string> blobsSeen = new Collection<string>();
+            List<string> expectedNamesFirst = new List<string>();
+            List<string> expectedNamesSecond = new List<string>();
+
+            var container = new SkewableFakeStorageBlobContainer(containerName, client as FakeStorageBlobClient,
+                (blobs) =>
+                {
+                    foreach (ICloudBlob blob in blobs.Results)
+                    {
+                        blobsSeen.Add(blob.Name);
+                        if (expectedNamesSecond.Contains(blob.Name))
+                        {
+                            blob.Properties.SetLastModified(secondTimeStamp);
+                        }
+                        else
+                        {
+                            blob.Properties.SetLastModified(firstTimeStamp);
+                        }
+                    }
+                });
+
+            // set cache limit to 5
+            IBlobListenerStrategy product = new ScanBlobScanLogHybridPollingStrategy(new TestBlobScanInfoManager(), _logger, 5);
+            LambdaBlobTriggerExecutor executor = new LambdaBlobTriggerExecutor();
+            typeof(ScanBlobScanLogHybridPollingStrategy)
+                   .GetField("_scanBlobLimitPerPoll", BindingFlags.Instance | BindingFlags.NonPublic)
+                   .SetValue(product, testScanBlobLimitPerPoll);
+
+            product.Register(container, executor);
+            product.Start();
+
+            async Task AddTenBlobsAsync(ICollection<string> expected)
+            {
+                for (int i = 0; i < 10; i++)
+                {
+                    expected.Add(await CreateBlobAndUploadToContainer(container));
+                }
+            }
+
+            // Add 10, which ensures several batches all with the same timestamp.
+            await AddTenBlobsAsync(expectedNamesFirst);
+
+            RunExecuteWithMultiPollingInterval(expectedNamesFirst, product, executor, testScanBlobLimitPerPoll);
+
+            // We expect the first 5 will be cached and not called, so remove them from the expected list
+            foreach (string blobName in blobsSeen.Take(5))
+            {
+                expectedNamesFirst.Remove(blobName);
+            }
+
+            // Run again with the same batch. 5 of the items will cause an invocation because
+            // they are in the cache; the others will.
+            RunExecuteWithMultiPollingIntervalSameTimestamp(expectedNamesFirst, product, executor);
+
+            // First scan will be 4 calls (10 items). Second scan will be 4 calls (10 items).
+            Assert.Equal(8, container.CallCount);
+
+            // The first poll saw 10 blobs; second poll saw 10.
+            Assert.Equal(20, blobsSeen.Count);
+
+            // now add some more records with a newer timestamp
+            await AddTenBlobsAsync(expectedNamesSecond);
+
+            RunExecuteWithMultiPollingIntervalSameTimestamp((expectedNamesFirst.Concat(expectedNamesSecond)).ToList(), product, executor);
+
+            // Remove the cached values and try several more times to ensure we don't log the "cache full" message every time.
+            foreach (string blobName in blobsSeen.Skip(10).Take(5))
+            {
+                expectedNamesSecond.Remove(blobName);
+            }
+            RunExecuteWithMultiPollingIntervalSameTimestamp(expectedNamesSecond, product, executor);
+            RunExecuteWithMultiPollingIntervalSameTimestamp(expectedNamesSecond, product, executor);
+            RunExecuteWithMultiPollingIntervalSameTimestamp(expectedNamesSecond, product, executor);
+
+            var cacheFullMessages = _loggerProvider.GetAllLogMessages().Where(p => p.EventId.Name == "MaxCacheSizeReached").ToArray();
+            Assert.Equal(2, cacheFullMessages.Length);
+            Assert.Equal(firstTimeStamp, DateTime.Parse(cacheFullMessages[0].GetStateValue<string>("lastModified")));
+            Assert.Equal(secondTimeStamp, DateTime.Parse(cacheFullMessages[1].GetStateValue<string>("lastModified")));
         }
 
         [Fact]
@@ -410,7 +560,7 @@ namespace Microsoft.Azure.WebJobs.Host.FunctionalTests.Blobs.Listeners
             return new FakeStorageAccount();
         }
 
-        private void RunExecuterWithExpectedBlobsInternal(IDictionary<string, int> blobNameMap, IBlobListenerStrategy product, LambdaBlobTriggerExecutor executor, int expectedCount)
+        private int RunExecuterWithExpectedBlobsInternal(IDictionary<string, int> blobNameMap, IBlobListenerStrategy product, LambdaBlobTriggerExecutor executor, int? expectedCount)
         {
             if (blobNameMap.Count == 0)
             {
@@ -419,6 +569,7 @@ namespace Microsoft.Azure.WebJobs.Host.FunctionalTests.Blobs.Listeners
                     throw new InvalidOperationException("shouldn't be any blobs in the container");
                 };
                 product.Execute().Wait.Wait();
+                return 0;
             }
             else
             {
@@ -442,37 +593,57 @@ namespace Microsoft.Azure.WebJobs.Host.FunctionalTests.Blobs.Listeners
                     return true;
                 };
                 product.Execute();
-                Assert.Equal(expectedCount, count);
+
+                if (expectedCount.HasValue)
+                {
+                    Assert.Equal(expectedCount.Value, count);
+                }
+
+                return count;
             }
         }
 
         private void RunExecuterWithExpectedBlobs(List<string> blobNames, IBlobListenerStrategy product, LambdaBlobTriggerExecutor executor)
         {
-            RunExecuterWithExpectedBlobs(blobNames, product, executor, blobNames.Count);
-        }
-
-        private void RunExecuterWithExpectedBlobs(List<string> blobNames, IBlobListenerStrategy product, LambdaBlobTriggerExecutor executor, int expectedCount)
-        {
             var blobNameMap = blobNames.ToDictionary(n => n, n => 0);
-            RunExecuterWithExpectedBlobsInternal(blobNameMap, product, executor, expectedCount);
+            RunExecuterWithExpectedBlobsInternal(blobNameMap, product, executor, blobNames.Count);
         }
-
 
         private void RunExecuterWithExpectedBlobs(IDictionary<string, int> blobNameMap, IBlobListenerStrategy product, LambdaBlobTriggerExecutor executor)
         {
             RunExecuterWithExpectedBlobsInternal(blobNameMap, product, executor, blobNameMap.Count);
         }
 
-        private void RunExecuteWithMultiPollingInterval(List<string> expectedBlobNames, IBlobListenerStrategy product, LambdaBlobTriggerExecutor executor, int expectedCount)
+        private void RunExecuteWithMultiPollingIntervalSameTimestamp(List<string> expectedBlobNames, IBlobListenerStrategy product, LambdaBlobTriggerExecutor executor)
+        {
+            // a map so we can track retries in the event of failures
+            Dictionary<string, int> blobNameMap = expectedBlobNames.ToDictionary(n => n, n => 0);
+
+            int count;
+            int totalCount;
+            // In cases where a container scan contains a lot of blobs with the same latest timestamp, we'll
+            // filter some if we've already seen them to prevent a check against the blob receipts. This means 
+            // that the blobs we find will not necessarily equal the polling size. So skip this check in the test.
+            // It also means that we don't know how many scans we'll need to do to find all the new blobs. So 
+            // make sure we scan until we find them all.
+            for (totalCount = 0; totalCount < expectedBlobNames.Count; totalCount += count)
+            {
+                count = RunExecuterWithExpectedBlobsInternal(blobNameMap, product, executor, null);
+            }
+
+            Assert.Equal(expectedBlobNames.Count, totalCount);
+        }
+
+        private void RunExecuteWithMultiPollingInterval(List<string> expectedBlobNames, IBlobListenerStrategy product, LambdaBlobTriggerExecutor executor, int pollSize)
         {
             // a map so we can track retries in the event of failures
             Dictionary<string, int> blobNameMap = expectedBlobNames.ToDictionary(n => n, n => 0);
 
             // make sure it is processed in chunks of "expectedCount" size
-            for (int i = 0; i < expectedBlobNames.Count; i += expectedCount)
+            for (int i = 0; i < expectedBlobNames.Count; i += pollSize)
             {
                 RunExecuterWithExpectedBlobsInternal(blobNameMap, product, executor,
-                    Math.Min(expectedCount, expectedBlobNames.Count - i));
+                    Math.Min(pollSize, expectedBlobNames.Count - i));
             }
         }
 
@@ -487,13 +658,24 @@ namespace Microsoft.Azure.WebJobs.Host.FunctionalTests.Blobs.Listeners
 
         private class LambdaBlobTriggerExecutor : ITriggerExecutor<BlobTriggerExecutorContext>
         {
+            public Func<ICloudBlob, bool> ExecuteLambda { get; set; }
+
+            public virtual Task<FunctionResult> ExecuteAsync(BlobTriggerExecutorContext value, CancellationToken cancellationToken)
+            {
+                bool succeeded = ExecuteLambda.Invoke(value.Blob);
+
+                FunctionResult result = new FunctionResult(succeeded);
+                return Task.FromResult(result);
+            }
+        }
+
+        private class LambdaBlobTriggerWithReceiptsExecutor : LambdaBlobTriggerExecutor
+        {
             public ICollection<string> _blobReceipts { get; } = new Collection<string>();
 
             public IEnumerable<string> BlobReceipts => _blobReceipts;
 
-            public Func<ICloudBlob, bool> ExecuteLambda { get; set; }
-
-            public Task<FunctionResult> ExecuteAsync(BlobTriggerExecutorContext value, CancellationToken cancellationToken)
+            public override Task<FunctionResult> ExecuteAsync(BlobTriggerExecutorContext value, CancellationToken cancellationToken)
             {
                 bool succeeded = true;
 
