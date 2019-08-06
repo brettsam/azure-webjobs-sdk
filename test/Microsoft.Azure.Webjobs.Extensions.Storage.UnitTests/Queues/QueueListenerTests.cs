@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Azure.WebJobs.Extensions.Storage;
 using Microsoft.Azure.WebJobs.Host.Executors;
 using Microsoft.Azure.WebJobs.Host.Listeners;
 using Microsoft.Azure.WebJobs.Host.Protocols;
@@ -30,6 +31,7 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests.Queues
         private Mock<QueueProcessor> _mockQueueProcessor;
         private Mock<ITriggerExecutor<CloudQueueMessage>> _mockTriggerExecutor;
         private CloudQueueMessage _queueMessage;
+        private ResponseListener _responseListener = new ResponseListener(NullLogger<ResponseListener>.Instance);
         private ILoggerFactory _loggerFactory;
 
         public QueueListenerTests(TestFixture fixture)
@@ -55,7 +57,7 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests.Queues
             mockQueueProcessorFactory.Setup(p => p.Create(It.IsAny<QueueProcessorFactoryContext>())).Returns(_mockQueueProcessor.Object);
 
             _listener = new QueueListener(_mockQueue.Object, null, _mockTriggerExecutor.Object, mockExceptionDispatcher.Object, _loggerFactory, null, queueConfig,
-                mockQueueProcessorFactory.Object, new FunctionDescriptor());
+                mockQueueProcessorFactory.Object, new FunctionDescriptor(), _responseListener);
             _queueMessage = new CloudQueueMessage("TestMessage");
         }
 
@@ -78,7 +80,7 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests.Queues
             var queueProcessorFactory = new DefaultQueueProcessorFactory();
 
             QueueListener listener = new QueueListener(queue, poisonQueue, mockTriggerExecutor.Object, new WebJobsExceptionHandler(null),
-                NullLoggerFactory.Instance, null, queuesOptions, queueProcessorFactory, new FunctionDescriptor());
+                NullLoggerFactory.Instance, null, queuesOptions, queueProcessorFactory, new FunctionDescriptor(), _responseListener);
 
             mockTriggerExecutor
                 .Setup(m => m.ExecuteAsync(It.IsAny<CloudQueueMessage>(), CancellationToken.None))
@@ -116,7 +118,7 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests.Queues
             CloudQueueMessage messageFromCloud = await queue.GetMessageAsync();
 
             QueueListener listener = new QueueListener(queue, null, mockTriggerExecutor.Object, new WebJobsExceptionHandler(null),
-                NullLoggerFactory.Instance, null, new QueuesOptions(), new DefaultQueueProcessorFactory(), new FunctionDescriptor());
+                NullLoggerFactory.Instance, null, new QueuesOptions(), new DefaultQueueProcessorFactory(), new FunctionDescriptor(), _responseListener);
             listener.MinimumVisibilityRenewalInterval = TimeSpan.FromSeconds(1);
 
             // Set up a function that sleeps to allow renewal

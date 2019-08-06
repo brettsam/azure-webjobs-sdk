@@ -4,6 +4,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Azure.WebJobs.Extensions.Storage;
 using Microsoft.Azure.WebJobs.Host.Executors;
 using Microsoft.Azure.WebJobs.Host.Listeners;
 using Microsoft.Azure.WebJobs.Host.Protocols;
@@ -34,6 +35,7 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
         private readonly IBlobPathSource _input;
         private readonly ITriggeredFunctionExecutor _executor;
         private readonly IHostSingletonManager _singletonManager;
+        private readonly ResponseListener _responseListener;
 
         public BlobListenerFactory(IHostIdProvider hostIdProvider,
             QueuesOptions queueOptions,
@@ -49,7 +51,8 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
             CloudBlobContainer container,
             IBlobPathSource input,
             ITriggeredFunctionExecutor executor,
-            IHostSingletonManager singletonManager)
+            IHostSingletonManager singletonManager,
+            ResponseListener responseListener)
         {
             _hostIdProvider = hostIdProvider ?? throw new ArgumentNullException(nameof(hostIdProvider));
             _queueOptions = queueOptions ?? throw new ArgumentNullException(nameof(queueOptions));
@@ -66,6 +69,7 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
             _input = input ?? throw new ArgumentNullException(nameof(input));
             _executor = executor ?? throw new ArgumentNullException(nameof(executor));
             _singletonManager = singletonManager ?? throw new ArgumentNullException(nameof(singletonManager));
+            _responseListener = responseListener ?? throw new ArgumentNullException(nameof(responseListener));
         }
 
         public async Task<IListener> CreateAsync(CancellationToken cancellationToken)
@@ -88,7 +92,7 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
             SharedQueueWatcher sharedQueueWatcher = _messageEnqueuedWatcherSetter;
 
             SharedBlobListener sharedBlobListener = _sharedContextProvider.GetOrCreateInstance<SharedBlobListener>(
-                new SharedBlobListenerFactory(hostId, _hostAccount, _exceptionHandler, _blobWrittenWatcherSetter));
+                new SharedBlobListenerFactory(hostId, _hostAccount, _exceptionHandler, _blobWrittenWatcherSetter, _responseListener));
 
             // Register the blob container we wish to monitor with the shared blob listener.
             await RegisterWithSharedBlobListenerAsync(hostId, sharedBlobListener, primaryBlobClient,
@@ -98,7 +102,7 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
             // notification queue and dispatch to the target job function.
             SharedBlobQueueListener sharedBlobQueueListener = _sharedContextProvider.GetOrCreateInstance<SharedBlobQueueListener>(
                 new SharedBlobQueueListenerFactory(_hostAccount, sharedQueueWatcher, hostBlobTriggerQueue,
-                    _queueOptions, _exceptionHandler, _loggerFactory, sharedBlobListener.BlobWritterWatcher, _functionDescriptor));
+                    _queueOptions, _exceptionHandler, _loggerFactory, sharedBlobListener.BlobWritterWatcher, _functionDescriptor, _responseListener));
             var queueListener = new BlobListener(sharedBlobQueueListener);
 
             // determine which client to use for the poison queue

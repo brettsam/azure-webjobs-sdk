@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Azure.WebJobs.Extensions.Storage;
 using Microsoft.Azure.WebJobs.Host.Executors;
 using Microsoft.Azure.WebJobs.Host.Listeners;
 using Microsoft.Azure.WebJobs.Host.Timers;
@@ -25,10 +26,12 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
         private readonly Thread _initialScanThread;
         private readonly ConcurrentQueue<ICloudBlob> _blobsFoundFromScanOrNotification;
         private readonly CancellationTokenSource _cancellationTokenSource;
+        private readonly ResponseListener _responseListener;
+
         private bool _performInitialScan;
         private bool _disposed;
 
-        public PollLogsStrategy(bool performInitialScan = true)
+        public PollLogsStrategy(ResponseListener responseListener, bool performInitialScan = true)
         {
             _registrations = new Dictionary<CloudBlobContainer, ICollection<ITriggerExecutor<ICloudBlob>>>(
                 new CloudBlobContainerComparer());
@@ -37,6 +40,7 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
             _blobsFoundFromScanOrNotification = new ConcurrentQueue<ICloudBlob>();
             _cancellationTokenSource = new CancellationTokenSource();
             _performInitialScan = performInitialScan;
+            _responseListener = responseListener ?? throw new ArgumentNullException(nameof(responseListener));
         }
 
         public async Task RegisterAsync(CloudBlobContainer container, ITriggerExecutor<ICloudBlob> triggerExecutor,
@@ -70,7 +74,7 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
 
             if (!_logListeners.ContainsKey(client))
             {
-                BlobLogListener logListener = await BlobLogListener.CreateAsync(client, cancellationToken);
+                BlobLogListener logListener = await BlobLogListener.CreateAsync(client, _responseListener, cancellationToken);
                 _logListeners.Add(client, logListener);
             }
         }

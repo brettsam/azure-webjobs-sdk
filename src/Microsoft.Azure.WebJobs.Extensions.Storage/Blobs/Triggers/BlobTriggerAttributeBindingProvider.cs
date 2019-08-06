@@ -30,6 +30,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.Storage.Blobs.Triggers
         private readonly ISharedContextProvider _sharedContextProvider;
         private readonly IHostSingletonManager _singletonManager;
         private readonly ILoggerFactory _loggerFactory;
+        private readonly ResponseListener _responseListener;
 
         public BlobTriggerAttributeBindingProvider(INameResolver nameResolver,
             StorageAccountProvider accountProvider,
@@ -41,7 +42,8 @@ namespace Microsoft.Azure.WebJobs.Extensions.Storage.Blobs.Triggers
             SharedQueueWatcher messageEnqueuedWatcherSetter,
             ISharedContextProvider sharedContextProvider,
             IHostSingletonManager singletonManager,
-            ILoggerFactory loggerFactory)
+            ILoggerFactory loggerFactory,
+            ResponseListener responseListener)
         {
             _accountProvider = accountProvider ?? throw new ArgumentNullException(nameof(accountProvider));
             _hostIdProvider = hostIdProvider ?? throw new ArgumentNullException(nameof(hostIdProvider));
@@ -52,6 +54,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.Storage.Blobs.Triggers
             _messageEnqueuedWatcherSetter = messageEnqueuedWatcherSetter ?? throw new ArgumentNullException(nameof(messageEnqueuedWatcherSetter));
             _sharedContextProvider = sharedContextProvider ?? throw new ArgumentNullException(nameof(sharedContextProvider));
             _singletonManager = singletonManager ?? throw new ArgumentNullException(nameof(singletonManager));
+            _responseListener = responseListener ?? throw new ArgumentNullException(nameof(responseListener));
 
             _nameResolver = nameResolver;
             _loggerFactory = loggerFactory;
@@ -79,7 +82,7 @@ namespace Microsoft.Azure.WebJobs.Extensions.Storage.Blobs.Triggers
 
             ITriggerBinding binding = new BlobTriggerBinding(parameter, hostAccount, dataAccount, path,
                 _hostIdProvider, _queueOptions, _blobsOptions, _exceptionHandler, _blobWrittenWatcherSetter,
-                _messageEnqueuedWatcherSetter, _sharedContextProvider, _singletonManager, _loggerFactory);
+                _messageEnqueuedWatcherSetter, _sharedContextProvider, _singletonManager, _loggerFactory, _responseListener);
 
             return Task.FromResult(binding);
         }

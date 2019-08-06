@@ -8,6 +8,7 @@ using System.Linq;
 using System.Runtime.ExceptionServices;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Azure.WebJobs.Extensions.Storage;
 using Microsoft.Azure.WebJobs.Host.Executors;
 using Microsoft.Azure.WebJobs.Host.Listeners;
 using Microsoft.Azure.WebJobs.Host.Protocols;
@@ -34,6 +35,7 @@ namespace Microsoft.Azure.WebJobs.Host.Queues.Listeners
         private readonly TimeSpan _visibilityTimeout;
         private readonly ILogger<QueueListener> _logger;
         private readonly FunctionDescriptor _functionDescriptor;
+        private readonly ResponseListener _responseListener;
         private bool? _queueExists;
         private bool _foundMessageSinceLastDelay;
         private bool _disposed;
@@ -48,6 +50,7 @@ namespace Microsoft.Azure.WebJobs.Host.Queues.Listeners
             QueuesOptions queueOptions,
             IQueueProcessorFactory queueProcessorFactory,
             FunctionDescriptor functionDescriptor,
+            ResponseListener responseListener,
             TimeSpan? maxPollingInterval = null)
         {
             if (queueOptions == null)
@@ -83,6 +86,7 @@ namespace Microsoft.Azure.WebJobs.Host.Queues.Listeners
             _queueOptions = queueOptions;
             _logger = loggerFactory.CreateLogger<QueueListener>();
             _functionDescriptor = functionDescriptor ?? throw new ArgumentNullException(nameof(functionDescriptor));
+            _responseListener = responseListener ?? throw new ArgumentNullException(nameof(responseListener));
 
             // if the function runs longer than this, the invisibility will be updated
             // on a timer periodically for the duration of the function execution
@@ -172,13 +176,20 @@ namespace Microsoft.Azure.WebJobs.Host.Queues.Listeners
                     Stopwatch sw = Stopwatch.StartNew();
                     OperationContext context = new OperationContext { ClientRequestID = Guid.NewGuid().ToString() };
 
-                    batch = await _queue.GetMessagesAsync(_queueProcessor.BatchSize,
-                        _visibilityTimeout,
-                        options: null,
-                        operationContext: context,
-                        cancellationToken: cancellationToken);
+                    batch = await _responseListener.TrackRequestAsync("GetMessages", context.ClientRequestID, ct =>
+                    {
+                        using (var cts = CancellationTokenSource.CreateLinkedTokenSource(ct, cancellationToken))
+                        {
+                            return _queue.GetMessagesAsync(_queueProcessor.BatchSize,
+                                _visibilityTimeout,
+                                options: null,
+                                operationContext: context,
+                                cancellationToken: cts.Token);
+                        }
+                    });
 
-                    Logger.GetMessages(_logger, _functionDescriptor.LogName, _queue.Name, context.ClientRequestID, batch.Count(), sw.ElapsedMilliseconds);
+                    int count = batch?.Count() ?? -1;
+                    Logger.GetMessages(_logger, _functionDescriptor.LogName, _queue.Name, context.ClientRequestID, -1, sw.ElapsedMilliseconds);
                 }
             }
             catch (StorageException exception)

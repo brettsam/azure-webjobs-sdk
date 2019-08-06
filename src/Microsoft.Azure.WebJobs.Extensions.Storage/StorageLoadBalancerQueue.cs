@@ -5,6 +5,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Azure.WebJobs;
+using Microsoft.Azure.WebJobs.Extensions.Storage;
 using Microsoft.Azure.WebJobs.Host;
 using Microsoft.Azure.WebJobs.Host.Executors;
 using Microsoft.Azure.WebJobs.Host.Listeners;
@@ -28,6 +29,7 @@ namespace WebJobs.Extensions.Storage
         private readonly SharedQueueWatcher _sharedWatcher;
         private readonly StorageAccountProvider _storageAccountProvider;
         private readonly IQueueProcessorFactory _queueProcessorFactory;
+        private readonly ResponseListener _responseListener;
 
         public StorageLoadBalancerQueue(
             StorageAccountProvider storageAccountProvider,
@@ -35,7 +37,8 @@ namespace WebJobs.Extensions.Storage
                IWebJobsExceptionHandler exceptionHandler,
                SharedQueueWatcher sharedWatcher,
                ILoggerFactory loggerFactory,
-               IQueueProcessorFactory queueProcessorFactory)
+               IQueueProcessorFactory queueProcessorFactory,
+               ResponseListener responseListener)
         {
             _storageAccountProvider = storageAccountProvider;
             _queueOptions = queueOptions.Value;
@@ -43,6 +46,7 @@ namespace WebJobs.Extensions.Storage
             _sharedWatcher = sharedWatcher;
             _loggerFactory = loggerFactory;
             _queueProcessorFactory = queueProcessorFactory;
+            _responseListener = responseListener ?? throw new ArgumentNullException(nameof(responseListener));
         }
 
         public IAsyncCollector<T> GetQueueWriter<T>(string queue)
@@ -112,6 +116,7 @@ namespace WebJobs.Extensions.Storage
                 queueOptions: _queueOptions,
                 queueProcessorFactory: _queueProcessorFactory,
                 functionDescriptor: new FunctionDescriptor(),
+                _responseListener,
                 maxPollingInterval: maxPollingInterval);
 
             return listener;

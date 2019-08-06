@@ -4,6 +4,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Microsoft.Azure.WebJobs.Extensions.Storage;
 using Microsoft.Azure.WebJobs.Host.Bindings;
 using Microsoft.Azure.WebJobs.Host.Converters;
 using Microsoft.Azure.WebJobs.Host.Listeners;
@@ -25,6 +26,7 @@ namespace Microsoft.Azure.WebJobs.Host.Queues.Triggers
         private readonly QueuesOptions _queueOptions;
         private readonly IWebJobsExceptionHandler _exceptionHandler;
         private readonly SharedQueueWatcher _messageEnqueuedWatcherSetter;
+        private readonly ResponseListener _responseListener;
         private readonly ILoggerFactory _loggerFactory;
         private readonly IObjectToTypeConverter<CloudQueueMessage> _converter;
         private readonly IQueueProcessorFactory _queueProcessorFactory;
@@ -36,7 +38,8 @@ namespace Microsoft.Azure.WebJobs.Host.Queues.Triggers
             IWebJobsExceptionHandler exceptionHandler,
             SharedQueueWatcher messageEnqueuedWatcherSetter,
             ILoggerFactory loggerFactory,
-            IQueueProcessorFactory queueProcessorFactory)
+            IQueueProcessorFactory queueProcessorFactory,
+            ResponseListener responseListener)
         {
             _queue = queue ?? throw new ArgumentNullException(nameof(queue));
             _argumentBinding = argumentBinding ?? throw new ArgumentNullException(nameof(argumentBinding));
@@ -44,6 +47,7 @@ namespace Microsoft.Azure.WebJobs.Host.Queues.Triggers
             _queueOptions = queueOptions ?? throw new ArgumentNullException(nameof(queueOptions));
             _exceptionHandler = exceptionHandler ?? throw new ArgumentNullException(nameof(exceptionHandler));
             _messageEnqueuedWatcherSetter = messageEnqueuedWatcherSetter ?? throw new ArgumentNullException(nameof(messageEnqueuedWatcherSetter));
+            _responseListener = responseListener ?? throw new ArgumentNullException(nameof(responseListener));
 
             _parameterName = parameterName;
             _loggerFactory = loggerFactory;
@@ -122,7 +126,7 @@ namespace Microsoft.Azure.WebJobs.Host.Queues.Triggers
             }
 
             var factory = new QueueListenerFactory(_queue, _queueOptions, _exceptionHandler,
-                    _messageEnqueuedWatcherSetter, _loggerFactory, context.Executor, _queueProcessorFactory, context.Descriptor);
+                    _messageEnqueuedWatcherSetter, _loggerFactory, context.Executor, _queueProcessorFactory, context.Descriptor, _responseListener);
 
             return factory.CreateAsync(context.CancellationToken);
         }

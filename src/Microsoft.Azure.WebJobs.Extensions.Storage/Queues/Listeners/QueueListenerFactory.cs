@@ -5,6 +5,7 @@ using System;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Azure.WebJobs.Extensions.Storage;
 using Microsoft.Azure.WebJobs.Host.Executors;
 using Microsoft.Azure.WebJobs.Host.Listeners;
 using Microsoft.Azure.WebJobs.Host.Protocols;
@@ -27,6 +28,7 @@ namespace Microsoft.Azure.WebJobs.Host.Queues.Listeners
         private readonly ITriggeredFunctionExecutor _executor;
         private readonly FunctionDescriptor _descriptor;
         private readonly IQueueProcessorFactory _queueProcessorFactory;
+        private readonly ResponseListener _responseListener;
 
         public QueueListenerFactory(CloudQueue queue,
             QueuesOptions queueOptions,
@@ -35,7 +37,8 @@ namespace Microsoft.Azure.WebJobs.Host.Queues.Listeners
             ILoggerFactory loggerFactory,
             ITriggeredFunctionExecutor executor,
             IQueueProcessorFactory queueProcessorFactory,
-            FunctionDescriptor descriptor)
+            FunctionDescriptor descriptor,
+            ResponseListener responseListener)
         {
             _queue = queue ?? throw new ArgumentNullException(nameof(queue));
             _queueOptions = queueOptions ?? throw new ArgumentNullException(nameof(queueOptions));
@@ -43,6 +46,7 @@ namespace Microsoft.Azure.WebJobs.Host.Queues.Listeners
             _messageEnqueuedWatcherSetter = messageEnqueuedWatcherSetter ?? throw new ArgumentNullException(nameof(messageEnqueuedWatcherSetter));
             _executor = executor ?? throw new ArgumentNullException(nameof(executor));
             _descriptor = descriptor ?? throw new ArgumentNullException(nameof(descriptor));
+            _responseListener = responseListener ?? throw new ArgumentNullException(nameof(responseListener));
 
             _poisonQueue = CreatePoisonQueueReference(queue.ServiceClient, queue.Name);
             _loggerFactory = loggerFactory;
@@ -55,7 +59,7 @@ namespace Microsoft.Azure.WebJobs.Host.Queues.Listeners
             QueueTriggerExecutor triggerExecutor = new QueueTriggerExecutor(_executor);
 
             IListener listener = new QueueListener(_queue, _poisonQueue, triggerExecutor, _exceptionHandler, _loggerFactory,
-                _messageEnqueuedWatcherSetter, _queueOptions, _queueProcessorFactory, functionDescriptor: _descriptor);
+                _messageEnqueuedWatcherSetter, _queueOptions, _queueProcessorFactory, functionDescriptor: _descriptor, _responseListener);
 
             return Task.FromResult(listener);
         }

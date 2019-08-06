@@ -7,6 +7,8 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Azure.WebJobs.Extensions.Storage;
+using Microsoft.WindowsAzure.Storage;
 using Microsoft.WindowsAzure.Storage.Blob;
 using Microsoft.WindowsAzure.Storage.Shared.Protocol;
 
@@ -24,10 +26,12 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
         private readonly CloudBlobClient _blobClient;
         private readonly HashSet<string> _scannedBlobNames = new HashSet<string>();
         private readonly StorageAnalyticsLogParser _parser = new StorageAnalyticsLogParser();
+        private readonly ResponseListener _responseListener;
 
-        private BlobLogListener(CloudBlobClient blobClient)
+        private BlobLogListener(CloudBlobClient blobClient, ResponseListener responseListener)
         {
             _blobClient = blobClient;
+            _responseListener = responseListener;
         }
 
         public CloudBlobClient Client
@@ -36,11 +40,11 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
         }
 
         // This will throw if the client credentials are not valid. 
-        public static async Task<BlobLogListener> CreateAsync(CloudBlobClient blobClient,
+        public static async Task<BlobLogListener> CreateAsync(CloudBlobClient blobClient, ResponseListener responseListener,
             CancellationToken cancellationToken)
         {
             await EnableLoggingAsync(blobClient, cancellationToken);
-            return new BlobLogListener(blobClient);
+            return new BlobLogListener(blobClient, responseListener);
         }
 
         public async Task<IEnumerable<ICloudBlob>> GetRecentBlobWritesAsync(CancellationToken cancellationToken,
@@ -49,7 +53,7 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
             List<ICloudBlob> blobs = new List<ICloudBlob>();
 
             var time = DateTime.UtcNow; // will scan back 2 hours, which is enough to deal with clock sqew
-            foreach (var blob in await ListRecentLogFilesAsync(_blobClient, time, cancellationToken, hoursWindow))
+            foreach (var blob in await ListRecentLogFilesAsync(_blobClient, time, cancellationToken, hoursWindow, _responseListener))
             {
                 bool isAdded = _scannedBlobNames.Add(blob.Name);
                 if (!isAdded)
@@ -137,7 +141,7 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
         // Logs are about 6 an hour, so we're only scanning about 12 logs total. 
         // $$$ If logs are large, we can even have a cache of "already scanned" logs that we skip. 
         private static async Task<List<ICloudBlob>> ListRecentLogFilesAsync(CloudBlobClient blobClient,
-            DateTime startTimeForSearch, CancellationToken cancellationToken, int hoursWindow)
+            DateTime startTimeForSearch, CancellationToken cancellationToken, int hoursWindow, ResponseListener responseListener)
         {
             string serviceName = "blob";
 
@@ -147,7 +151,7 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
             for (int i = 0; i < hoursWindow; i++)
             {
                 var prefix = GetSearchPrefix(serviceName, lastHour, lastHour);
-                await GetLogsWithPrefixAsync(selectedLogs, blobClient, prefix, cancellationToken);
+                await GetLogsWithPrefixAsync(selectedLogs, blobClient, prefix, responseListener, cancellationToken);
                 lastHour = lastHour.AddHours(-1);
             }
 
@@ -157,12 +161,25 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
         // Populate the List<> with blob logs for the given prefix. 
         // http://blogs.msdn.com/b/windowsazurestorage/archive/2011/08/03/windows-azure-storage-logging-using-logs-to-track-storage-requests.aspx
         private static async Task GetLogsWithPrefixAsync(List<ICloudBlob> selectedLogs, CloudBlobClient blobClient,
-            string prefix, CancellationToken cancellationToken)
+            string prefix, ResponseListener responseListener, CancellationToken cancellationToken)
         {
             // List the blobs using the prefix
-            IEnumerable<IListBlobItem> blobs = await blobClient.ListBlobsAsync(prefix,
-                useFlatBlobListing: true, blobListingDetails: BlobListingDetails.Metadata,
-                cancellationToken: cancellationToken);
+            string clientRequestId = Guid.NewGuid().ToString();
+            OperationContext context = new OperationContext { ClientRequestID = clientRequestId };
+
+            IEnumerable<IListBlobItem> blobs = await responseListener.TrackRequestAsync("ScanLogs", clientRequestId, ct =>
+            {
+                using (var cts = CancellationTokenSource.CreateLinkedTokenSource(ct, cancellationToken))
+                {
+                    return blobClient.ListBlobsAsync(prefix, useFlatBlobListing: true, blobListingDetails: BlobListingDetails.Metadata,
+                        cancellationToken: cts.Token);
+                }
+            });
+
+            if (blobs == null)
+            {
+                return;
+            }
 
             // iterate through each blob and figure the start and end times in the metadata
             // Type cast to IStorageBlob is safe due to useFlatBlobListing: true above.

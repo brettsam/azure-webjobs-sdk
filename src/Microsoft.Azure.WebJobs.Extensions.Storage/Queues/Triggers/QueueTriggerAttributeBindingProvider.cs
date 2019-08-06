@@ -4,6 +4,7 @@
 using System;
 using System.Reflection;
 using System.Threading.Tasks;
+using Microsoft.Azure.WebJobs.Extensions.Storage;
 using Microsoft.Azure.WebJobs.Host.Queues.Listeners;
 using Microsoft.Azure.WebJobs.Host.Timers;
 using Microsoft.Azure.WebJobs.Host.Triggers;
@@ -27,6 +28,7 @@ namespace Microsoft.Azure.WebJobs.Host.Queues.Triggers
         private readonly QueuesOptions _queueOptions;
         private readonly IWebJobsExceptionHandler _exceptionHandler;
         private readonly SharedQueueWatcher _messageEnqueuedWatcherSetter;
+        private readonly ResponseListener _responseListener;
         private readonly ILoggerFactory _loggerFactory;
         private readonly IQueueProcessorFactory _queueProcessorFactory;
 
@@ -36,12 +38,14 @@ namespace Microsoft.Azure.WebJobs.Host.Queues.Triggers
             IWebJobsExceptionHandler exceptionHandler,
             SharedQueueWatcher messageEnqueuedWatcherSetter,
             ILoggerFactory loggerFactory,
-            IQueueProcessorFactory queueProcessorFactory)
+            IQueueProcessorFactory queueProcessorFactory,
+            ResponseListener responseListener)
         {
             _accountProvider = accountProvider ?? throw new ArgumentNullException(nameof(accountProvider));
             _queueOptions = (queueOptions ?? throw new ArgumentNullException(nameof(queueOptions))).Value;
             _exceptionHandler = exceptionHandler ?? throw new ArgumentNullException(nameof(exceptionHandler));
             _messageEnqueuedWatcherSetter = messageEnqueuedWatcherSetter ?? throw new ArgumentNullException(nameof(messageEnqueuedWatcherSetter));
+            _responseListener = responseListener ?? throw new ArgumentNullException(nameof(responseListener));
 
             _nameResolver = nameResolver;
             _loggerFactory = loggerFactory;
@@ -78,7 +82,7 @@ namespace Microsoft.Azure.WebJobs.Host.Queues.Triggers
 
             ITriggerBinding binding = new QueueTriggerBinding(parameter.Name, queue, argumentBinding,
                 _queueOptions, _exceptionHandler, _messageEnqueuedWatcherSetter,
-                _loggerFactory, _queueProcessorFactory);
+                _loggerFactory, _queueProcessorFactory, _responseListener);
             return Task.FromResult(binding);
         }
 

@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Azure.WebJobs.Extensions.Storage;
 using Microsoft.Azure.WebJobs.Host.Executors;
 using Microsoft.Azure.WebJobs.Host.Listeners;
 using Microsoft.Azure.WebJobs.Host.Timers;
@@ -20,6 +21,7 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
         private static readonly TimeSpan PollingInterval = TimeSpan.FromSeconds(10);
         private readonly IDictionary<CloudBlobContainer, ContainerScanInfo> _scanInfo;
         private readonly ConcurrentQueue<ICloudBlob> _blobsFoundFromScanOrNotification;
+        private readonly ResponseListener _responseListener;
         private readonly CancellationTokenSource _cancellationTokenSource;
         private IBlobScanInfoManager _blobScanInfoManager;
         // A budget is allocated representing the number of blobs to be listed in a polling 
@@ -29,13 +31,14 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
         private PollLogsStrategy _pollLogStrategy;
         private bool _disposed;
 
-        public ScanBlobScanLogHybridPollingStrategy(IBlobScanInfoManager blobScanInfoManager) : base()
+        public ScanBlobScanLogHybridPollingStrategy(IBlobScanInfoManager blobScanInfoManager, ResponseListener responseListener) : base()
         {
             _blobScanInfoManager = blobScanInfoManager;
             _scanInfo = new Dictionary<CloudBlobContainer, ContainerScanInfo>(new CloudBlobContainerComparer());
-            _pollLogStrategy = new PollLogsStrategy(performInitialScan: false);
+            _pollLogStrategy = new PollLogsStrategy(responseListener, performInitialScan: false);
             _cancellationTokenSource = new CancellationTokenSource();
             _blobsFoundFromScanOrNotification = new ConcurrentQueue<ICloudBlob>();
+            _responseListener = responseListener;
         }
 
         public void Start()
@@ -195,7 +198,7 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
             CloudBlobContainer container, ContainerScanInfo containerScanInfo, CancellationToken cancellationToken)
         {
             IEnumerable<IListBlobItem> currentBlobs;
-            BlobResultSegment blobSegment;
+            BlobResultSegment blobSegment = null;
             int blobPollLimitPerContainer = _scanBlobLimitPerPoll / _scanInfo.Count;
             BlobContinuationToken continuationToken = containerScanInfo.ContinuationToken;
 
@@ -206,9 +209,25 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Listeners
             }
             try
             {
-                blobSegment = await container.ListBlobsSegmentedAsync(prefix: null, useFlatBlobListing: true,
-                    blobListingDetails: BlobListingDetails.None, maxResults: blobPollLimitPerContainer, currentToken: continuationToken,
-                    options: null, operationContext: null, cancellationToken: cancellationToken);
+                string clientRequestId = Guid.NewGuid().ToString();
+                OperationContext context = new OperationContext { ClientRequestID = clientRequestId };
+                BlobRequestOptions options = new BlobRequestOptions { MaximumExecutionTime = TimeSpan.FromSeconds(90) };
+
+                blobSegment = await _responseListener.TrackRequestAsync("ScanContainer", clientRequestId, ct =>
+                {
+                    using (var cts = CancellationTokenSource.CreateLinkedTokenSource(ct, cancellationToken))
+                    {
+                        return container.ListBlobsSegmentedAsync(prefix: null, useFlatBlobListing: true,
+                            blobListingDetails: BlobListingDetails.None, maxResults: blobPollLimitPerContainer, currentToken: continuationToken,
+                            options: options, operationContext: context, cancellationToken: cts.Token);
+                    }
+                });
+
+                if (blobSegment == null)
+                {
+                    return Enumerable.Empty<ICloudBlob>();
+                }
+
                 currentBlobs = blobSegment.Results;
             }
             catch (StorageException exception)

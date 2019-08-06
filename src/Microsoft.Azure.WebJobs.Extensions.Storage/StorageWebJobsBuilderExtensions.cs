@@ -3,6 +3,7 @@
 
 using System;
 using Microsoft.Azure.WebJobs;
+using Microsoft.Azure.WebJobs.Extensions.Storage;
 using Microsoft.Azure.WebJobs.Extensions.Storage.Blobs.Triggers;
 using Microsoft.Azure.WebJobs.Host;
 using Microsoft.Azure.WebJobs.Host.Bindings;
@@ -17,7 +18,6 @@ using Microsoft.Azure.WebJobs.Host.Queues.Triggers;
 using Microsoft.Azure.WebJobs.Host.Tables.Config;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using Microsoft.Extensions.Options;
 using Microsoft.WindowsAzure.Storage;
 using WebJobs.Extensions.Storage;
 
@@ -51,6 +51,7 @@ namespace Microsoft.Extensions.Hosting
             builder.Services.TryAddSingleton<IContextSetter<IMessageEnqueuedWatcher>>((p) => new ContextAccessor<IMessageEnqueuedWatcher>());
             builder.Services.TryAddSingleton((p) => p.GetService<IContextSetter<IMessageEnqueuedWatcher>>() as IContextGetter<IMessageEnqueuedWatcher>);
 
+            builder.Services.AddSingleton<ResponseListener>();
             builder.Services.TryAddSingleton<BlobTriggerAttributeBindingProvider>();
 
             builder.Services.TryAddSingleton<QueueTriggerAttributeBindingProvider>();

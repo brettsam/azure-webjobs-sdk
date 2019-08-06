@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using System.Threading.Tasks;
+using Microsoft.Azure.WebJobs.Extensions.Storage;
 using Microsoft.Azure.WebJobs.Host.Bindings;
 using Microsoft.Azure.WebJobs.Host.Blobs.Listeners;
 using Microsoft.Azure.WebJobs.Host.Converters;
@@ -38,6 +39,7 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Triggers
         private readonly ILoggerFactory _loggerFactory;
         private readonly IAsyncObjectToTypeConverter<ICloudBlob> _converter;
         private readonly IReadOnlyDictionary<string, Type> _bindingDataContract;
+        private readonly ResponseListener _responseListener;
         private readonly IHostSingletonManager _singletonManager;
 
         public BlobTriggerBinding(ParameterInfo parameter,
@@ -52,12 +54,13 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Triggers
             SharedQueueWatcher messageEnqueuedWatcherSetter,
             ISharedContextProvider sharedContextProvider,
             IHostSingletonManager singletonManager,
-            ILoggerFactory loggerFactory)
+            ILoggerFactory loggerFactory,
+            ResponseListener responseListener)
         {
             _parameter = parameter ?? throw new ArgumentNullException(nameof(parameter));
             _hostAccount = hostAccount ?? throw new ArgumentNullException(nameof(hostAccount));
             _dataAccount = dataAccount ?? throw new ArgumentNullException(nameof(dataAccount));
-                        
+
 
             _blobClient = dataAccount.CreateCloudBlobClient();
             _accountName = BlobClient.GetAccountName(_blobClient);
@@ -73,6 +76,7 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Triggers
             _loggerFactory = loggerFactory;
             _converter = CreateConverter(_blobClient);
             _bindingDataContract = CreateBindingDataContract(path);
+            _responseListener = responseListener ?? throw new ArgumentNullException(nameof(responseListener));
         }
 
         public Type TriggerValueType
@@ -178,7 +182,7 @@ namespace Microsoft.Azure.WebJobs.Host.Blobs.Triggers
 
             var factory = new BlobListenerFactory(_hostIdProvider, _queueOptions, _blobsOptions, _exceptionHandler,
                 _blobWrittenWatcherSetter, _messageEnqueuedWatcherSetter, _sharedContextProvider, _loggerFactory,
-                context.Descriptor, _hostAccount, _dataAccount, container, _path, context.Executor, _singletonManager);
+                context.Descriptor, _hostAccount, _dataAccount, container, _path, context.Executor, _singletonManager, _responseListener);
 
             return factory.CreateAsync(context.CancellationToken);
         }
